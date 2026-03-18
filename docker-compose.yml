@@ -1,0 +1,65 @@
+services:
+  bot:
+    build: .
+    container_name: journal-bot
+    command: python bot.py
+    restart: unless-stopped
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - BOT_USERNAME=${BOT_USERNAME}
+      - ADMIN_IDS=${ADMIN_IDS}
+      - CHANNEL_ID=${CHANNEL_ID}
+      - CHANNEL_INVITE_LINK=${CHANNEL_INVITE_LINK}
+      - DATABASE_PATH=/app/data/bot.db
+      - PRODAMUS_API_KEY=${PRODAMUS_API_KEY}
+      - PRODAMUS_SYS=${PRODAMUS_SYS}
+      - PRODAMUS_WEBHOOK_SECRET=${PRODAMUS_WEBHOOK_SECRET}
+      - PRODAMUS_WEBHOOK_URL=${PRODAMUS_WEBHOOK_URL}
+      - PRODAMUS_PAYFORM_URL=${PRODAMUS_PAYFORM_URL}
+      - PRODAMUS_PRODUCT_ID_MONTHLY=${PRODAMUS_PRODUCT_ID_MONTHLY}
+      - PRODAMUS_PRODUCT_ID_LIFETIME=${PRODAMUS_PRODUCT_ID_LIFETIME}
+    volumes:
+      - ./data:/app/data  # монтируем директорию для БД
+      - ./media:/app/media  # монтируем директорию для медиа
+    networks:
+      - bot-network
+    mem_limit: 300m
+    cpus: '0.4'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  webhook:
+    build: .
+    container_name: journal-webhook
+    command: python webhook_server.py
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - BOT_USERNAME=${BOT_USERNAME}
+      - CHANNEL_ID=${CHANNEL_ID}
+      - CHANNEL_INVITE_LINK=${CHANNEL_INVITE_LINK}
+      - DATABASE_PATH=/app/data/bot.db
+      - PRODAMUS_WEBHOOK_SECRET=${PRODAMUS_WEBHOOK_SECRET}
+      - WEBHOOK_PORT=8080
+    volumes:
+      - ./data:/app/data  # та же директория для БД
+    networks:
+      - bot-network
+    depends_on:
+      - bot
+    mem_limit: 200m
+    cpus: '0.3'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  bot-network:
+    driver: bridge

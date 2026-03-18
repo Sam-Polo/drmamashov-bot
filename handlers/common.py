@@ -1,0 +1,329 @@
+from aiogram import Router, F, Bot
+from aiogram.types import Message, CallbackQuery, FSInputFile
+from aiogram.filters import Command, CommandStart
+import os
+import aiosqlite
+from database.models import Database
+from keyboards.inline import (
+    get_main_menu,
+    get_about_channel_menu,
+    get_subscription_menu,
+    get_tariffs_menu,
+    get_back_to_main,
+)
+from keyboards.reply import get_start_keyboard
+from utils.texts import (
+    get_about_channel_text,
+    get_requisites_text,
+    get_subscription_status_text,
+)
+from config import DATABASE_PATH, CHANNEL_ID
+
+router = Router()
+db = Database(DATABASE_PATH)
+
+# путь к приветственному изображению
+GREETING_IMAGE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "media", "greeting.JPG")
+
+# приветственный текст бота
+WELCOME_TEXT = """Привет, рада тебя видеть!
+
+Приглашаю в мужской журнал: ты можешь смотреть больше моих фотографий каждый день и читать статьи от специалистов по психологии для мужчин.
+
+Здесь же будут зарядки, которые подходят мужчинам и женщинам. Подключайся к нашему журналу, это просто и совсем недорого =)"""
+
+
+@router.message(CommandStart())
+async def cmd_start(message: Message):
+    """обработчик команды /start"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    user = message.from_user
+    
+    # добавляем пользователя в БД
+    await db.add_user(user.id, user.username, user.first_name)
+    
+    # проверяем параметры команды (для редиректа после оплаты)
+    args = None
+    if message.text and len(message.text.split()) > 1:
+        args = message.text.split()[1]
+    
+    logger.info(f"Команда /start от пользователя {user.id} (@{user.username}), args={args}")
+    
+    if args == "payment_success":
+        subscription = await db.get_user_subscription(user.id)
+        logger.info(f"Редирект после успешной оплаты для пользователя {user.id}, подписка в БД: {subscription is not None}")
+        
+        if subscription:
+            text = "✅ Оплата успешно обработана!\n\nДоступ к каналу активирован. Проверьте сообщения от бота со ссылкой для вступления."
+        else:
+            text = "✅ Оплата получена!\n\nОбрабатываю платеж... Ссылка для вступления в канал будет отправлена в течение нескольких секунд.\nТакже ссылку можно найти в разделе \"Подписка\""
+        
+        await message.answer(text, reply_markup=get_main_menu())
+        return
+    elif args == "payment_fail":
+        logger.info(f"Редирект после неудачной оплаты для пользователя {user.id}")
+        text = "❌ Оплата не прошла. Попробуйте еще раз или обратитесь в поддержку."
+        await message.answer(text, reply_markup=get_main_menu())
+        return
+    
+    # отправляем фото приветствия отдельным сообщением (без кнопок)
+    if os.path.exists(GREETING_IMAGE_PATH):
+        try:
+            photo = FSInputFile(GREETING_IMAGE_PATH)
+            await message.answer_photo(photo=photo)
+        except Exception as e:
+            logger.warning(f"Ошибка отправки приветственного фото: {e}")
+    
+    # отправляем текстовое сообщение с меню (это сообщение будет редактироваться)
+    await message.answer(WELCOME_TEXT, reply_markup=get_main_menu())
+
+
+@router.message(Command("menu"))
+async def cmd_menu(message: Message):
+    """обработчик команды /menu - возврат в главное меню"""
+    await message.answer(WELCOME_TEXT, reply_markup=get_main_menu())
+
+
+@router.callback_query(F.data == "main_menu")
+async def callback_main_menu(callback: CallbackQuery):
+    """обработчик возврата в главное меню"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    await callback.answer()
+    
+    try:
+        # редактируем текущее сообщение
+        await callback.message.edit_text(WELCOME_TEXT, reply_markup=get_main_menu())
+    except Exception as e:
+        logger.warning(f"Ошибка редактирования сообщения: {e}")
+        # если не удалось отредактировать, отправляем новое
+        await callback.message.answer(WELCOME_TEXT, reply_markup=get_main_menu())
+
+
+@router.message(Command("activate"))
+async def cmd_activate(message: Message, bot: Bot):
+    """команда для активации бесплатного периода для существующих участников канала"""
+    from aiogram.enums import ChatMemberStatus
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    user_id = message.from_user.id
+    user = message.from_user
+    
+    args = message.text.split()[1:] if len(message.text.split()) > 1 else []
+    
+    ACTIVATE_PASSWORD = "cloud"
+    if not args or args[0].lower() != ACTIVATE_PASSWORD:
+        await message.answer(
+            "🔐 Для активации бесплатного периода требуется пароль.\n\n"
+            f"Использование: /activate <пароль>\n\n"
+            "Обратитесь к администратору для получения пароля."
+        )
+        return
+    
+    await db.add_user(user_id, user.username, user.first_name)
+    
+    existing = await db.get_user_subscription(user_id)
+    if existing:
+        is_trial = await db.is_trial_subscription(existing)
+        if is_trial:
+            await message.answer(
+                "✅ У вас уже активирован бесплатный период!\n\n"
+                "Используйте меню бота для управления."
+            )
+        else:
+            await message.answer(
+                "✅ У вас уже есть активная подписка!\n\n"
+                "Используйте меню бота для управления подпиской."
+            )
+        return
+    
+    if not CHANNEL_ID:
+        await message.answer(
+            "❌ Ошибка конфигурации: CHANNEL_ID не установлен.\n"
+            "Обратитесь к администратору."
+        )
+        return
+    
+    try:
+        chat_member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
+        status = chat_member.status
+        
+        is_member = status in [
+            ChatMemberStatus.MEMBER,
+            ChatMemberStatus.ADMINISTRATOR,
+            ChatMemberStatus.CREATOR
+        ]
+        
+        if not is_member:
+            await message.answer(
+                "❌ Вы не являетесь участником закрытого канала.\n\n"
+                "Эта команда предназначена только для существующих участников, "
+                "которые были добавлены до запуска нового бота.\n\n"
+                "Если вы были участником ранее, убедитесь, что вы все еще в канале, "
+                "или обратитесь к администратору."
+            )
+            return
+        
+        success = await db.create_free_period(
+            user_id=user_id,
+            duration_days=30
+        )
+        
+        if success:
+            await message.answer(
+                "✅ Бесплатный период успешно активирован!\n\n"
+                "Вы получили доступ на 30 дней для перехода на новый бот.\n\n"
+                "⚠️ По окончании бесплатного периода необходимо оплатить подписку в боте.\n\n"
+                "Теперь вы можете использовать все функции бота. "
+                "Для получения ссылки на канал используйте раздел 'Подписка'."
+            )
+            logger.info(f"✅ Активация бесплатного периода для пользователя {user_id} через /activate")
+        else:
+            await message.answer(
+                "⚠️ Не удалось активировать бесплатный период.\n\n"
+                "Возможно, у вас уже есть активная подписка или произошла ошибка.\n"
+                "Обратитесь к администратору."
+            )
+    
+    except Exception as e:
+        logger.error(f"Ошибка при активации бесплатного периода для пользователя {user_id}: {e}", exc_info=True)
+        await message.answer(
+            "❌ Произошла ошибка при активации бесплатного периода.\n\n"
+            "Обратитесь к администратору для ручной активации."
+        )
+
+
+@router.message(F.text == "Старт")
+async def handle_start_button(message: Message):
+    """обработчик кнопки 'Старт' из обычной клавиатуры"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    user = message.from_user
+    await db.add_user(user.id, user.username, user.first_name)
+    
+    # отправляем фото приветствия
+    if os.path.exists(GREETING_IMAGE_PATH):
+        try:
+            photo = FSInputFile(GREETING_IMAGE_PATH)
+            await message.answer_photo(photo=photo)
+        except Exception as e:
+            logger.warning(f"Ошибка отправки приветственного фото: {e}")
+    
+    await message.answer(WELCOME_TEXT, reply_markup=get_main_menu())
+
+
+@router.callback_query(F.data == "about_channel")
+async def callback_about_channel(callback: CallbackQuery):
+    """обработчик раздела 'О журнале'"""
+    await callback.answer()
+    text = get_about_channel_text()
+    await callback.message.edit_text(text, reply_markup=get_about_channel_menu())
+
+
+@router.callback_query(F.data == "requisites")
+async def callback_requisites(callback: CallbackQuery):
+    """обработчик раздела 'Реквизиты'"""
+    await callback.answer()
+    text = get_requisites_text()
+    await callback.message.edit_text(text, reply_markup=get_back_to_main())
+
+
+@router.callback_query(F.data == "subscription")
+async def callback_subscription(callback: CallbackQuery):
+    """обработчик раздела 'Подписка'"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    await callback.answer()
+    
+    user = callback.from_user
+    user_id = user.id
+    
+    # проверяем подарки (только если функционал включён)
+    from config import GIFTS_ENABLED
+    pending_gift = None
+    if GIFTS_ENABLED:
+        pending_gift = await db.get_pending_gift(user_id, user.username)
+        if pending_gift:
+            logger.info(f"Найден неактивированный подарок для пользователя {user_id}: {pending_gift}")
+            from config import TARIFFS
+            tariff_type = pending_gift["tariff_type"]
+            tariff_info = TARIFFS.get(tariff_type)
+            
+            if tariff_info:
+                try:
+                    await db.create_subscription(
+                        user_id=user_id,
+                        tariff_type=tariff_type,
+                        duration_days=tariff_info["duration_days"],
+                        prodamus_subscription_id=None,
+                        prodamus_order_id=None
+                    )
+                    
+                    if not pending_gift.get("recipient_user_id") and user_id:
+                        async with aiosqlite.connect(db.db_path) as db_conn:
+                            await db_conn.execute("""
+                                UPDATE gifts 
+                                SET recipient_user_id = ?
+                                WHERE id = ?
+                            """, (user_id, pending_gift["id"]))
+                            await db_conn.commit()
+                    
+                    await db.activate_gift(pending_gift["id"])
+                    logger.info(f"Активирован подарок для пользователя {user_id}: тариф {tariff_type}")
+                    
+                    from config import CHANNEL_ID
+                    if CHANNEL_ID:
+                        try:
+                            bot = callback.bot
+                            await bot.unban_chat_member(
+                                chat_id=CHANNEL_ID,
+                                user_id=user_id,
+                                only_if_banned=False
+                            )
+                        except Exception as e:
+                            logger.error(f"Ошибка при добавлении пользователя в канал: {e}", exc_info=True)
+                except Exception as e:
+                    logger.error(f"Ошибка при активации подарка: {e}", exc_info=True)
+    
+    subscription = await db.get_user_subscription(user_id)
+    has_subscription = subscription is not None
+    text = get_subscription_status_text(subscription)
+    
+    if not has_subscription:
+        text = "Выбрать тариф:"
+        await callback.message.edit_text(text, reply_markup=get_tariffs_menu())
+    else:
+        await callback.message.edit_text(text, reply_markup=get_subscription_menu(has_subscription))
+
+
+@router.callback_query(F.data == "get_channel_link")
+async def callback_get_channel_link(callback: CallbackQuery):
+    """обработчик получения ссылки на канал"""
+    import logging
+    from config import CHANNEL_INVITE_LINK
+    
+    logger = logging.getLogger(__name__)
+    user_id = callback.from_user.id
+    
+    subscription = await db.get_user_subscription(user_id)
+    
+    if not subscription:
+        await callback.answer("❌ У вас нет активной подписки", show_alert=True)
+        return
+    
+    channel_link = CHANNEL_INVITE_LINK
+    if not channel_link:
+        logger.error("CHANNEL_INVITE_LINK не установлен в конфиге")
+        await callback.answer("❌ Ссылка на канал не настроена. Обратитесь в поддержку.", show_alert=True)
+        return
+    
+    text = f"🔗 Ссылка для вступления в закрытый канал:\n\n{channel_link}"
+    
+    await callback.message.answer(text)
+    await callback.answer("✅ Ссылка отправлена")

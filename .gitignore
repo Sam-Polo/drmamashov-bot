@@ -1,0 +1,16 @@
+.env
+*.db
+*.sqlite
+*.sqlite3
+data/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+.venv/
+nugaeva-dance-bot/
+*.log
+TESP.md
