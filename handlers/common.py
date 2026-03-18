@@ -1,9 +1,8 @@
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery, FSInputFile
+from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command, CommandStart
 import os
 import aiosqlite
-import asyncio
 from database.models import Database
 from keyboards.inline import (
     get_main_menu,
@@ -23,9 +22,6 @@ from config import DATABASE_PATH, CHANNEL_ID
 router = Router()
 db = Database(DATABASE_PATH)
 
-# путь к приветственному изображению
-GREETING_IMAGE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "media", "greeting.JPG")
-
 # приветственный текст бота
 WELCOME_TEXT = """🧠 Эта рассылка — ваш личный проводник в мир глубинной психологии и реальных изменений.
 1 год — 52 письма.
@@ -33,21 +29,6 @@ WELCOME_TEXT = """🧠 Эта рассылка — ваш личный пров�
 
 ✨ «Это ваш шанс наконец разобраться в себе — будь вы в активной зависимости, в ремиссии или просто хотите лучше понимать свою психику.
 Присоединяйтесь к сообществу людей, которые меняют свою жизнь через глубокое самопознание»"""
-
-
-async def _send_greeting_photo_best_effort(message: Message, logger):
-    """отправляет приветственное фото без блокировки меню"""
-    if not os.path.exists(GREETING_IMAGE_PATH):
-        return
-
-    try:
-        photo = FSInputFile(GREETING_IMAGE_PATH)
-        # ограничиваем ожидание, чтобы /start не "висел" из-за медиа
-        await asyncio.wait_for(message.answer_photo(photo=photo), timeout=15)
-    except asyncio.TimeoutError:
-        logger.warning("Ошибка отправки приветственного фото: timeout")
-    except Exception as e:
-        logger.warning(f"Ошибка отправки приветственного фото: {e}")
 
 
 @router.message(CommandStart())
@@ -87,9 +68,6 @@ async def cmd_start(message: Message):
     
     # отправляем текстовое сообщение с меню (это сообщение будет редактироваться)
     await message.answer(WELCOME_TEXT, reply_markup=get_main_menu())
-
-    # отправляем фото приветствия отдельным сообщением (без кнопок) — в фоне
-    asyncio.create_task(_send_greeting_photo_best_effort(message, logger))
 
 
 @router.message(Command("menu"))
@@ -219,9 +197,6 @@ async def handle_start_button(message: Message):
     await db.add_user(user.id, user.username, user.first_name)
     
     await message.answer(WELCOME_TEXT, reply_markup=get_main_menu())
-
-    # отправляем фото приветствия в фоне, чтобы не тормозить меню
-    asyncio.create_task(_send_greeting_photo_best_effort(message, logger))
 
 
 @router.callback_query(F.data == "about_channel")
