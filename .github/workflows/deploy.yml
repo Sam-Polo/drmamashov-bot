@@ -23,7 +23,10 @@ jobs:
           set -euo pipefail
           # важно: ssh-agent иногда предлагает не тот ключ или ключ некорректно подхватывается;
           # поэтому кладем ключ в файл и указываем его явно.
-          printf '%s\n' "$DEPLOY_SSH_KEY" > deploy_key
+          # сохраняем мультистрочный приватник как есть (без потерь и лишних переносов)
+          printf '%s' "$DEPLOY_SSH_KEY" > deploy_key
+          # если секрет пришел с Windows CRLF, ssh может не принять ключ
+          sed -i 's/\r$//' deploy_key || true
           chmod 600 deploy_key
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -42,6 +45,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # сначала делаем "smoke ssh" (с -vvv), чтобы было видно какая причина отказа
+          ssh -vvv -i ./deploy_key \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o PasswordAuthentication=no \
+            -p "${DEPLOY_PORT}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" "echo 'ssh-ok'" || exit 20
           ssh -i ./deploy_key \
             -o IdentitiesOnly=yes \
             -o BatchMode=yes \
