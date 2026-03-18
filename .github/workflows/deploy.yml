@@ -27,7 +27,13 @@ jobs:
           printf '%s' "$DEPLOY_SSH_KEY" > deploy_key
           # если секрет пришел с Windows CRLF, ssh может не принять ключ
           sed -i 's/\r$//' deploy_key || true
+          # обрезаем trailing whitespace, чтобы не ломать base64-часть ключа
+          sed -i 's/[[:space:]]\+$//' deploy_key || true
+          # гарантируем перевод строки в конце файла
+          echo >> deploy_key
           chmod 600 deploy_key
+          # проверяем, что ключ парсится
+          ssh-keygen -l -f deploy_key >/dev/null
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
 
