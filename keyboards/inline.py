@@ -6,7 +6,7 @@ def get_main_menu():
     """главное меню с разделами"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💳 Подписаться", callback_data="subscription")],
-        [InlineKeyboardButton(text="📖 О журнале", callback_data="about_channel")],
+        [InlineKeyboardButton(text="📖 О рассылке", callback_data="about_channel")],
         # [InlineKeyboardButton(text="🎁 Подарить подписку", callback_data="gift_select_tariff")],  # временно скрыто
         [InlineKeyboardButton(text="❓ Задать вопрос", url="https://t.me/nugaevahelps")],
     ])
@@ -17,7 +17,7 @@ def get_about_channel_menu():
     """меню раздела 'О журнале'"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📋 Реквизиты", callback_data="requisites")],
-        [InlineKeyboardButton(text="📄 Оферта", url="https://docs.google.com/document/d/1GFzH9Xp7AlpkJ-hNeIGeK1Yn7qArW6p5/edit")],
+        [InlineKeyboardButton(text="📄 Оферта", url="https://docs.google.com/document/d/1-Q434Dv0oaDiJSbeu3gUUihBy-s4hVBwShW-TbEneUk/edit?usp=drivesdk")],
         [InlineKeyboardButton(text="◀️ Назад", callback_data="main_menu")],
     ])
     return keyboard
