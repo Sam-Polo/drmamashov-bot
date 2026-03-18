@@ -1,0 +1,63 @@
+name: deploy
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: add ssh key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: add known_hosts
+        shell: bash
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -p "${DEPLOY_PORT}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+
+      - name: deploy via ssh
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "${DEPLOY_PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" "bash -lc ' \
+            set -euo pipefail; \
+            if [ -z \"${DEPLOY_PATH}\" ]; then echo \"DEPLOY_PATH is empty\"; exit 2; fi; \
+            cd \"${DEPLOY_PATH}\"; \
+            # если на сервере есть ssh-ключ для github (например /root/.ssh/github),
+            # заставляем git использовать именно его (чтобы не падать на default keys)
+            if [ -f \"$HOME/.ssh/github\" ]; then \
+              export GIT_SSH_COMMAND=\"ssh -o IdentitiesOnly=yes -i $HOME/.ssh/github\"; \
+            fi; \
+            # на случай первого запуска: клонируем по ssh-url, чтобы не зависеть от https/токенов
+            if [ ! -d .git ]; then \
+              git clone git@github.com:Sam-Polo/drmamashov-bot.git .; \
+            fi; \
+            git fetch --all --prune; \
+            git reset --hard origin/main; \
+            docker compose build --pull; \
+            docker compose up -d; \
+            docker compose ps \
+          '"
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+
