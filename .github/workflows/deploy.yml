@@ -45,11 +45,17 @@ jobs:
             if [ -f \"$HOME/.ssh/github\" ]; then \
               export GIT_SSH_COMMAND=\"ssh -o IdentitiesOnly=yes -i $HOME/.ssh/github\"; \
             fi; \
-            # на случай первого запуска: клонируем по ssh-url, чтобы не зависеть от https/токенов
+            # первое выполнение: делаем git init + remote + fetch/reset,
+            # чтобы не зависеть от того, пустая ли директория
             if [ ! -d .git ]; then \
-              git clone git@github.com:Sam-Polo/drmamashov-bot.git .; \
+              git init; \
             fi; \
-            git fetch --all --prune; \
+            if git remote get-url origin >/dev/null 2>&1; then \
+              git remote set-url origin git@github.com:Sam-Polo/drmamashov-bot.git; \
+            else \
+              git remote add origin git@github.com:Sam-Polo/drmamashov-bot.git; \
+            fi; \
+            git fetch origin main --prune; \
             git reset --hard origin/main; \
             docker compose build --pull; \
             docker compose up -d; \
