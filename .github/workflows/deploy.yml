@@ -17,10 +17,16 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
 
-      - name: add ssh key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: write ssh key
+        shell: bash
+        run: |
+          set -euo pipefail
+          # важно: ssh-agent иногда предлагает не тот ключ или ключ некорректно подхватывается;
+          # поэтому кладем ключ в файл и указываем его явно.
+          printf '%s\n' "$DEPLOY_SSH_KEY" > deploy_key
+          chmod 600 deploy_key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
 
       - name: add known_hosts
         shell: bash
@@ -36,7 +42,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ssh -p "${DEPLOY_PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" "bash -lc ' \
+          ssh -i ./deploy_key \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o PasswordAuthentication=no \
+            -p "${DEPLOY_PORT}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" "bash -lc ' \
             set -euo pipefail; \
             if [ -z \"${DEPLOY_PATH}\" ]; then echo \"DEPLOY_PATH is empty\"; exit 2; fi; \
             cd \"${DEPLOY_PATH}\"; \
