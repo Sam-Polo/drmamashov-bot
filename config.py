@@ -24,8 +24,7 @@ DATABASE_PATH = os.getenv("DATABASE_PATH", "bot.db")
 
 # тарифы (в рублях)
 TARIFFS = {
-    "monthly": {"price": 364, "duration_days": 30, "name": "1 месяц"},
-    "lifetime": {"price": 3333, "duration_days": None, "name": "Навсегда"},
+    "monthly": {"price": 990, "duration_days": 30, "name": "1 месяц"},
 }
 
 # функции, временно отключенные

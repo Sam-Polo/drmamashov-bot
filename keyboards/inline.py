@@ -41,7 +41,7 @@ def get_tariffs_menu():
     """меню выбора тарифа"""
     buttons = []
     
-    # только два тарифа: monthly и lifetime
+    # один тариф: monthly
     if 'monthly' in TARIFFS:
         buttons.append([
             InlineKeyboardButton(
@@ -49,14 +49,6 @@ def get_tariffs_menu():
                 callback_data="tariff_monthly"
             )
         ])
-    
-    if 'lifetime' in TARIFFS:
-        buttons.append([
-            InlineKeyboardButton(
-                text=f"{TARIFFS['lifetime']['name']} - {TARIFFS['lifetime']['price']}₽",
-                callback_data="tariff_lifetime"
-            )
-    ])
     
     buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="main_menu")])
     
