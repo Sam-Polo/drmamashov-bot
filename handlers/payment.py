@@ -46,6 +46,43 @@ def _normalize_phone(raw_phone: str) -> str | None:
     return None
 
 
+async def _safe_delete_user_message(message: Message):
+    """удаляет сообщение пользователя, если возможно"""
+    try:
+        await message.delete()
+    except Exception:
+        # сообщение может быть уже удалено или недоступно к удалению
+        pass
+
+
+async def _render_payment_menu(
+    message: Message,
+    state: FSMContext,
+    text: str,
+    reply_markup: InlineKeyboardMarkup
+) -> None:
+    """обновляет одно меню оплаты, при необходимости создает новое"""
+    state_data = await state.get_data()
+    menu_message_id = state_data.get("payment_menu_message_id")
+    chat_id = message.chat.id
+
+    if menu_message_id:
+        try:
+            await message.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=menu_message_id,
+                text=text,
+                reply_markup=reply_markup
+            )
+            return
+        except Exception:
+            # если старое меню недоступно, создаем новое и перезаписываем id
+            pass
+
+    sent = await message.answer(text, reply_markup=reply_markup)
+    await state.update_data(payment_menu_message_id=sent.message_id)
+
+
 @router.callback_query(F.data.startswith("tariff_"))
 async def callback_tariff_selected(callback: CallbackQuery, state: FSMContext):
     """обработчик выбранного тарифа - запрос email перед оплатой"""
@@ -58,7 +95,10 @@ async def callback_tariff_selected(callback: CallbackQuery, state: FSMContext):
     tariff_info = TARIFFS[tariff_type]
     
     await callback.answer()
-    await state.update_data(tariff_type=tariff_type)
+    await state.update_data(
+        tariff_type=tariff_type,
+        payment_menu_message_id=callback.message.message_id
+    )
     await state.set_state(PaymentStates.waiting_for_email)
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -83,10 +123,13 @@ async def process_email_for_payment(message: Message, state: FSMContext):
     # простая валидация email
     email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     if not re.match(email_regex, email):
+        await _safe_delete_user_message(message)
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="subscription")]
         ])
-        await message.answer(
+        await _render_payment_menu(
+            message,
+            state,
             "❌ Неверный формат email. Попробуйте ещё раз:\n\n"
             "Пример: example@mail.ru",
             reply_markup=keyboard
@@ -97,17 +140,21 @@ async def process_email_for_payment(message: Message, state: FSMContext):
     tariff_type = data.get("tariff_type")
     
     if not tariff_type or tariff_type not in TARIFFS:
+        await _safe_delete_user_message(message)
         await state.clear()
         await message.answer("❌ Ошибка: тариф не найден. Попробуйте снова.")
         return
     
+    await _safe_delete_user_message(message)
     await state.update_data(customer_email=email)
     await state.set_state(PaymentStates.waiting_for_phone)
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="◀️ Отмена", callback_data="subscription")]
     ])
-    await message.answer(
+    await _render_payment_menu(
+        message,
+        state,
         "📱 Теперь введите номер телефона строго в формате +79991234567.\n\n"
         "Пример: +79991234567\n\n"
         "Телефон нужен для привязки клиента в платежной системе.",
@@ -120,10 +167,13 @@ async def process_phone_for_payment(message: Message, state: FSMContext):
     """обработка введённого телефона и создание ссылки на оплату"""
     phone = _normalize_phone(message.text or "")
     if not phone:
+        await _safe_delete_user_message(message)
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="subscription")]
         ])
-        await message.answer(
+        await _render_payment_menu(
+            message,
+            state,
             "❌ Неверный формат телефона. Нужен строго формат +79991234567.\n\n"
             "Пример: +79991234567",
             reply_markup=keyboard
@@ -135,17 +185,20 @@ async def process_phone_for_payment(message: Message, state: FSMContext):
     email = data.get("customer_email")
 
     if not tariff_type or tariff_type not in TARIFFS or not email:
+        await _safe_delete_user_message(message)
         await state.clear()
         await message.answer("❌ Ошибка: данные оплаты потеряны. Попробуйте снова.")
         return
 
+    await _safe_delete_user_message(message)
     user_id = message.from_user.id
     tariff_info = TARIFFS[tariff_type]
 
-    await state.clear()
-
-    # показываем сообщение о загрузке
-    loading_msg = await message.answer("⏳ Создаю ссылку на оплату...")
+    # показываем статус в одном и том же сообщении-меню
+    loading_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="subscription")]
+    ])
+    await _render_payment_menu(message, state, "⏳ Создаю ссылку на оплату...", loading_keyboard)
 
     # создаем ссылку на оплату с email и телефоном
     payment_url = await prodamus_api.create_payment_link(
@@ -160,7 +213,8 @@ async def process_phone_for_payment(message: Message, state: FSMContext):
 
     if not payment_url:
         text = "❌ Ошибка создания ссылки на оплату.\n\nПопробуйте ещё раз или обратитесь в поддержку."
-        await loading_msg.edit_text(text, reply_markup=get_back_to_main())
+        await _render_payment_menu(message, state, text, get_back_to_main())
+        await state.clear()
         return
 
     text = f"""💳 Оплата подписки "{tariff_info['name']}"
@@ -176,7 +230,8 @@ async def process_phone_for_payment(message: Message, state: FSMContext):
         [InlineKeyboardButton(text="◀️ Назад", callback_data="subscription")],
     ])
     
-    await loading_msg.edit_text(text, reply_markup=keyboard)
+    await _render_payment_menu(message, state, text, keyboard)
+    await state.clear()
 
 
 @router.callback_query(F.data.startswith("promo_"))
