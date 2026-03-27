@@ -28,7 +28,6 @@ def get_subscription_menu(has_active_subscription: bool):
     buttons = []
     
     if has_active_subscription:
-        buttons.append([InlineKeyboardButton(text="🔗 Получить ссылку", callback_data="get_channel_link")])
         buttons.append([InlineKeyboardButton(text="❌ Отписаться", callback_data="unsubscribe")])
     
     buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="main_menu")])

@@ -56,7 +56,7 @@ async def cmd_start(message: Message):
         if subscription:
             text = "✅ Оплата успешно обработана!\n\nДоступ к каналу активирован. Проверьте сообщения от бота со ссылкой для вступления."
         else:
-            text = "✅ Оплата получена!\n\nОбрабатываю платеж... Ссылка для вступления в канал будет отправлена в течение нескольких секунд.\nТакже ссылку можно найти в разделе \"Подписка\""
+            text = "✅ Оплата получена!\n\nОбрабатываю платеж... Скоро придёт уведомление от бота."
         
         await message.answer(text, reply_markup=get_main_menu())
         return
@@ -169,7 +169,7 @@ async def cmd_activate(message: Message, bot: Bot):
                 "Вы получили доступ на 30 дней для перехода на новый бот.\n\n"
                 "⚠️ По окончании бесплатного периода необходимо оплатить подписку в боте.\n\n"
                 "Теперь вы можете использовать все функции бота. "
-                "Для получения ссылки на канал используйте раздел 'Подписка'."
+                "Статус подписки — в разделе «Подписка»."
             )
             logger.info(f"✅ Активация бесплатного периода для пользователя {user_id} через /activate")
         else:
@@ -282,30 +282,3 @@ async def callback_subscription(callback: CallbackQuery):
         await callback.message.edit_text(text, reply_markup=get_tariffs_menu())
     else:
         await callback.message.edit_text(text, reply_markup=get_subscription_menu(has_subscription))
-
-
-@router.callback_query(F.data == "get_channel_link")
-async def callback_get_channel_link(callback: CallbackQuery):
-    """обработчик получения ссылки на канал"""
-    import logging
-    from config import CHANNEL_INVITE_LINK
-    
-    logger = logging.getLogger(__name__)
-    user_id = callback.from_user.id
-    
-    subscription = await db.get_user_subscription(user_id)
-    
-    if not subscription:
-        await callback.answer("❌ У вас нет активной подписки", show_alert=True)
-        return
-    
-    channel_link = CHANNEL_INVITE_LINK
-    if not channel_link:
-        logger.error("CHANNEL_INVITE_LINK не установлен в конфиге")
-        await callback.answer("❌ Ссылка на канал не настроена. Обратитесь в поддержку.", show_alert=True)
-        return
-    
-    text = f"🔗 Ссылка для вступления в закрытый канал:\n\n{channel_link}"
-    
-    await callback.message.answer(text)
-    await callback.answer("✅ Ссылка отправлена")
