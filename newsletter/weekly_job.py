@@ -128,9 +128,10 @@ async def run_newsletter_tick(bot: Bot, db: Database, doc_id: str) -> None:
                     body = weeks_content.get(next_w)
                     if not body:
                         logger.warning(
-                            "newsletter: user_id=%s ждёт неделю %s, в документе нет — стоп",
+                            "newsletter: user_id=%s ждёт неделю %s, в документе нет (есть недели %s) — стоп",
                             user_id,
                             next_w,
+                            sorted(weeks_content.keys()),
                         )
                         skipped += 1
                         break
