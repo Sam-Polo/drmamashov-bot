@@ -56,6 +56,22 @@ class Database:
                 await db.execute("ALTER TABLE subscriptions ADD COLUMN customer_phone TEXT")
             except:
                 pass  # поле уже существует
+
+            # прогресс рассылки по неделям (якорь = момент старта подписки + задержка, МСК в ISO)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS newsletter_progress (
+                    user_id INTEGER PRIMARY KEY,
+                    next_week INTEGER NOT NULL DEFAULT 1,
+                    last_sent_iso_week TEXT,
+                    anchor_at TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(user_id)
+                )
+            """)
+            try:
+                await db.execute("ALTER TABLE newsletter_progress ADD COLUMN anchor_at TEXT")
+            except Exception:
+                pass
             
             # таблица промокодов
             # проверяем структуру существующей таблицы
@@ -364,6 +380,8 @@ class Database:
                 customer_phone
             ))
             await db.commit()
+
+        await self.newsletter_reset_anchor_for_new_subscription(user_id)
     
     async def create_migration_subscription(
         self,
@@ -954,4 +972,118 @@ class Database:
                 logger = logging.getLogger(__name__)
                 logger.error(f"Ошибка при очистке таблицы gifts: {e}", exc_info=True)
                 return 0
+
+    async def newsletter_ensure_user(self, user_id: int):
+        """создаёт пустую строку прогресса (якорь задаётся при подписке или бэкфилле)"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                INSERT OR IGNORE INTO newsletter_progress (user_id, next_week, last_sent_iso_week, anchor_at)
+                VALUES (?, 1, NULL, NULL)
+            """, (user_id,))
+            await db.commit()
+
+    async def newsletter_reset_anchor_for_new_subscription(self, user_id: int):
+        """с новой подпиской: неделя 1 с якорем (сейчас МСК + задержка из config)"""
+        from datetime import timedelta
+        from zoneinfo import ZoneInfo
+        from config import NEWSLETTER_FIRST_SEND_DELAY_MINUTES
+
+        msk = ZoneInfo("Europe/Moscow")
+        anchor = datetime.now(msk) + timedelta(minutes=NEWSLETTER_FIRST_SEND_DELAY_MINUTES)
+        anchor_iso = anchor.isoformat()
+
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                INSERT INTO newsletter_progress (user_id, next_week, last_sent_iso_week, anchor_at)
+                VALUES (?, 1, NULL, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    next_week = 1,
+                    last_sent_iso_week = NULL,
+                    anchor_at = excluded.anchor_at,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (user_id, anchor_iso))
+            await db.commit()
+
+    async def newsletter_backfill_anchor_from_subscription(self, user_id: int) -> bool:
+        """если anchor_at пустой — ставим от start_date активной подписки + задержка (старые записи)"""
+        from datetime import timedelta
+        from zoneinfo import ZoneInfo
+        from config import NEWSLETTER_FIRST_SEND_DELAY_MINUTES
+
+        progress = await self.newsletter_get_progress(user_id)
+        if progress and progress.get("anchor_at"):
+            return False
+
+        sub = await self.get_user_subscription(user_id)
+        if not sub or not sub.get("start_date"):
+            return False
+
+        start_raw = sub["start_date"]
+        if isinstance(start_raw, str):
+            try:
+                start_dt = datetime.fromisoformat(start_raw.replace("Z", "+00:00"))
+            except ValueError:
+                return False
+        else:
+            start_dt = start_raw
+
+        if start_dt.tzinfo is None:
+            msk = ZoneInfo("Europe/Moscow")
+            start_dt = start_dt.replace(tzinfo=msk)
+
+        anchor = start_dt.astimezone(ZoneInfo("Europe/Moscow")) + timedelta(
+            minutes=NEWSLETTER_FIRST_SEND_DELAY_MINUTES
+        )
+        anchor_iso = anchor.isoformat()
+
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                INSERT INTO newsletter_progress (user_id, next_week, last_sent_iso_week, anchor_at)
+                VALUES (?, 1, NULL, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    anchor_at = COALESCE(anchor_at, excluded.anchor_at),
+                    updated_at = CURRENT_TIMESTAMP
+            """, (user_id, anchor_iso))
+            await db.commit()
+        return True
+
+    async def newsletter_get_progress(self, user_id: int) -> Optional[dict]:
+        """прогресс рассылки: next_week, anchor_at, …"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM newsletter_progress WHERE user_id = ?",
+                (user_id,),
+            ) as cursor:
+                row = await cursor.fetchone()
+                return dict(row) if row else None
+
+    async def newsletter_advance_week(self, user_id: int, new_next_week: int):
+        """после успешной отправки: следующий номер недели контента"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                UPDATE newsletter_progress
+                SET next_week = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = ?
+            """, (new_next_week, user_id))
+            await db.commit()
+
+    async def newsletter_get_recipient_user_ids(self) -> list[int]:
+        """user_id с активной подпиской для рассылки"""
+        from config import NEWSLETTER_INCLUDE_TRIAL
+
+        async with aiosqlite.connect(self.db_path) as db:
+            if NEWSLETTER_INCLUDE_TRIAL:
+                query = """
+                    SELECT DISTINCT user_id FROM subscriptions
+                    WHERE is_active = 1 AND tariff_type IN ('monthly', 'lifetime', 'trial')
+                """
+            else:
+                query = """
+                    SELECT DISTINCT user_id FROM subscriptions
+                    WHERE is_active = 1 AND tariff_type IN ('monthly', 'lifetime')
+                """
+            async with db.execute(query) as cursor:
+                rows = await cursor.fetchall()
+                return [row[0] for row in rows]
 

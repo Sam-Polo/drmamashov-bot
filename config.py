@@ -43,3 +43,17 @@ PRODAMUS_PAYFORM_URL = os.getenv("PRODAMUS_PAYFORM_URL", "https://nugaeva.payfor
 # Product ID для каждого тарифа (получить после создания подписок в ЛК Prodamus)
 PRODAMUS_PRODUCT_ID_MONTHLY = os.getenv("PRODAMUS_PRODUCT_ID_MONTHLY", "")
 PRODAMUS_PRODUCT_ID_LIFETIME = os.getenv("PRODAMUS_PRODUCT_ID_LIFETIME", "")
+
+# версия для логов (на сервере можно задать тег/хеш деплоя)
+APP_VERSION = os.getenv("APP_VERSION", "dev")
+
+# рассылка «недель» из Google Doc (export txt, документ «доступен всем по ссылке»)
+NEWSLETTER_ENABLED = os.getenv("NEWSLETTER_ENABLED", "1").strip().lower() in ("1", "true", "yes")
+NEWSLETTER_GOOGLE_DOC_ID = os.getenv("NEWSLETTER_GOOGLE_DOC_ID", "").strip()
+# первая рассылка (неделя 1) не раньше чем через N минут после активации подписки (webhook / create_subscription)
+NEWSLETTER_FIRST_SEND_DELAY_MINUTES = int(os.getenv("NEWSLETTER_FIRST_SEND_DELAY_MINUTES", "5"))
+# интервал между «неделями» рассылки (календарные дни от якоря)
+NEWSLETTER_WEEK_SPACING_DAYS = int(os.getenv("NEWSLETTER_WEEK_SPACING_DAYS", "7"))
+# как часто проверять очередь рассылки (сек)
+NEWSLETTER_CHECK_INTERVAL_SEC = int(os.getenv("NEWSLETTER_CHECK_INTERVAL_SEC", "60"))
+NEWSLETTER_INCLUDE_TRIAL = os.getenv("NEWSLETTER_INCLUDE_TRIAL", "0").strip().lower() in ("1", "true", "yes")

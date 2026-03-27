@@ -69,6 +69,7 @@ async def cmd_help(message: Message):
 
 📢 Рассылка:
 /broadcast — рассылка сообщения всем пользователям
+/newsletter_status — проверить парсинг Google Doc (недели)
 
 🔧 Прочее:
 /unsubscribe — отписать пользователя (Prodamus + БД + канал)
@@ -77,6 +78,46 @@ async def cmd_help(message: Message):
 /cancel — отмена текущей операции"""
     
     await message.answer(text)
+
+
+@router.message(Command("newsletter_status"))
+async def cmd_newsletter_status(message: Message):
+    """проверка: doc id, настройки, число недель в документе (админ)"""
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("❌ У вас нет доступа к этой команде.")
+        return
+
+    from config import (
+        NEWSLETTER_GOOGLE_DOC_ID,
+        NEWSLETTER_ENABLED,
+        NEWSLETTER_INCLUDE_TRIAL,
+        NEWSLETTER_FIRST_SEND_DELAY_MINUTES,
+        NEWSLETTER_WEEK_SPACING_DAYS,
+        NEWSLETTER_CHECK_INTERVAL_SEC,
+    )
+
+    if not NEWSLETTER_GOOGLE_DOC_ID:
+        await message.answer("NEWSLETTER_GOOGLE_DOC_ID пустой в .env")
+        return
+
+    try:
+        from newsletter.google_doc import load_weeks
+
+        weeks = await load_weeks(NEWSLETTER_GOOGLE_DOC_ID)
+        keys = sorted(weeks.keys())
+        preview_nums = ", ".join(str(k) for k in keys[:20])
+        if len(keys) > 20:
+            preview_nums += "…"
+        await message.answer(
+            f"📬 newsletter: enabled={NEWSLETTER_ENABLED}, trial={NEWSLETTER_INCLUDE_TRIAL}\n"
+            f"старт через {NEWSLETTER_FIRST_SEND_DELAY_MINUTES} мин после подписки, шаг {NEWSLETTER_WEEK_SPACING_DAYS} дн.\n"
+            f"тик каждые {NEWSLETTER_CHECK_INTERVAL_SEC} с\n"
+            f"недель в документе: {len(keys)}\n"
+            f"номера: {preview_nums or '—'}"
+        )
+    except Exception as e:
+        logger.error("newsletter_status: %s", e, exc_info=True)
+        await message.answer(f"❌ Ошибка загрузки документа: {e}")
 
 
 @router.message(Command("users"))

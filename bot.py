@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 import aiohttp
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -171,6 +171,28 @@ async def warm_up_prodamus():
             await asyncio.sleep(300)
 
 
+async def newsletter_scheduler_loop(bot: Bot, db: Database):
+    """периодически: у кого наступила очередная «неделя» с якоря подписки — отправить выпуск"""
+    from config import (
+        NEWSLETTER_ENABLED,
+        NEWSLETTER_GOOGLE_DOC_ID,
+        NEWSLETTER_CHECK_INTERVAL_SEC,
+    )
+
+    if not NEWSLETTER_ENABLED or not NEWSLETTER_GOOGLE_DOC_ID:
+        logger.info("newsletter: выключена (NEWSLETTER_ENABLED или пустой NEWSLETTER_GOOGLE_DOC_ID)")
+        return
+
+    from newsletter.weekly_job import run_newsletter_tick
+
+    while True:
+        try:
+            await asyncio.sleep(max(15, NEWSLETTER_CHECK_INTERVAL_SEC))
+            await run_newsletter_tick(bot, db, NEWSLETTER_GOOGLE_DOC_ID)
+        except Exception as e:
+            logger.error("newsletter_scheduler_loop: %s", e, exc_info=True)
+
+
 async def main():
     """главная функция запуска бота"""
     # инициализация бота
@@ -207,6 +229,9 @@ async def main():
     # запускаем фоновую задачу для проверки истекших подписок
     asyncio.create_task(check_expired_subscriptions(bot, db))
     logger.info("✅ Запущена ежедневная проверка истекших подписок")
+
+    asyncio.create_task(newsletter_scheduler_loop(bot, db))
+    logger.info("✅ Запущен планировщик newsletter (якорь от подписки → Google Doc)")
     
     # устанавливаем команды меню бота
     await bot.set_my_commands([
