@@ -13,12 +13,23 @@ _WEEK_LINE = re.compile(
     re.IGNORECASE | re.UNICODE,
 )
 
+# редкий артефакт export txt: BOM / zero-width в начале файла или строки — инача «1 неделя» не матчится
+_INVISIBLE_LEADING = "\ufeff\u200b\u200c\u200d\u2060"
+
+
+def _line_for_week_header_match(line: str) -> str:
+    s = line.replace("\r", "").strip()
+    while s and s[0] in _INVISIBLE_LEADING:
+        s = s[1:]
+    return s
+
 
 def parse_weeks_from_text(raw: str) -> Dict[int, str]:
     """разбирает текст документа на {номер_недели: текст}"""
     if not raw or not raw.strip():
         return {}
 
+    raw = raw.lstrip("\ufeff")
     lines = raw.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     weeks: Dict[int, str] = {}
     current_week: int | None = None
@@ -34,7 +45,7 @@ def parse_weeks_from_text(raw: str) -> Dict[int, str]:
         current_lines = []
 
     for line in lines:
-        m = _WEEK_LINE.match(line)
+        m = _WEEK_LINE.match(_line_for_week_header_match(line))
         if m:
             flush()
             num = m.group(1) or m.group(2)
@@ -44,7 +55,14 @@ def parse_weeks_from_text(raw: str) -> Dict[int, str]:
             current_lines.append(line)
 
     flush()
-    return dict(sorted(weeks.items()))
+    result = dict(sorted(weeks.items()))
+    if result and min(result.keys()) > 1:
+        logger.warning(
+            "google doc: нет недели 1, минимум=%s (часто BOM/невидимые символы в первой строке export) — ключи %s",
+            min(result.keys()),
+            list(result.keys()),
+        )
+    return result
 
 
 def build_export_url(doc_id: str) -> str:
