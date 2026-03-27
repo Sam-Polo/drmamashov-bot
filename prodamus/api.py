@@ -26,7 +26,24 @@ class ProdamusAPI:
         # URL платежной формы (по документации: https://название_поддомена.payform.ru/)
         # можно переопределить через переменную окружения PRODAMUS_PAYFORM_URL
         # по умолчанию используем nugaeva.payform.ru
-        self.payform_url = os.getenv("PRODAMUS_PAYFORM_URL", "https://nugaeva.payform.ru/")
+        raw_payform_url = (os.getenv("PRODAMUS_PAYFORM_URL") or "").strip()
+
+        if not raw_payform_url:
+            raw_payform_url = "https://nugaeva.payform.ru/"
+            logger.warning(
+                "PRODAMUS_PAYFORM_URL пустой, использую значение по умолчанию: %s",
+                raw_payform_url
+            )
+
+        # если забыли указать схему, нормализуем до https
+        if not raw_payform_url.startswith(("http://", "https://")):
+            raw_payform_url = f"https://{raw_payform_url}"
+            logger.warning(
+                "PRODAMUS_PAYFORM_URL был без схемы, нормализован до: %s",
+                raw_payform_url
+            )
+
+        self.payform_url = raw_payform_url
     
     def _flatten_params(self, value: Any, prefix: str = "") -> list[tuple[str, str]]:
         """приводит вложенные структуры к php-совместным ключам (products[0][name])"""
