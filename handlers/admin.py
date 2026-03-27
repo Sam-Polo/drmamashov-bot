@@ -10,7 +10,16 @@ from aiogram.fsm.state import State, StatesGroup
 from database.models import Database
 from prodamus.webhook import ProdamusWebhookHandler
 from prodamus.api import ProdamusAPI
-from config import DATABASE_PATH, ADMIN_IDS, TARIFFS, BOT_TOKEN, CHANNEL_ID
+from config import (
+    DATABASE_PATH,
+    ADMIN_IDS,
+    TARIFFS,
+    BOT_TOKEN,
+    CHANNEL_ID,
+    NEWSLETTER_ENABLED,
+    NEWSLETTER_GOOGLE_DOC_ID,
+    NEWSLETTER_FIRST_SEND_DELAY_MINUTES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1116,6 +1125,12 @@ async def callback_adduser_tariff(callback: CallbackQuery, state: FSMContext, bo
             prodamus_subscription_id=None,
             prodamus_order_id=None
         )
+        # якорь рассылки уже выставлен в create_subscription (неделя 1 + задержка)
+        if NEWSLETTER_ENABLED and NEWSLETTER_GOOGLE_DOC_ID:
+            logger.info(
+                "adduser: очередь рассылки для user_id=%s сброшена (как при новой подписке)",
+                target_user_id,
+            )
         
         # добавляем пользователя в канал / разбаниваем
         if CHANNEL_ID:
@@ -1145,14 +1160,22 @@ async def callback_adduser_tariff(callback: CallbackQuery, state: FSMContext, bo
         
         # уведомляем пользователя о выданной подписке (если возможно)
         try:
-            await bot.send_message(
-                chat_id=target_user_id,
-                text=(
-                    f"✅ Вам выдан доступ к закрытому каналу.\n\n"
+            delay = NEWSLETTER_FIRST_SEND_DELAY_MINUTES
+            if NEWSLETTER_ENABLED and NEWSLETTER_GOOGLE_DOC_ID:
+                user_notice = (
+                    f"✅ Вам открыт доступ.\n\n"
                     f"Тариф: {tariff_info['name']}\n\n"
-                    f"Если вы ещё не в канале, используйте последнюю полученную ссылку-приглашение."
+                    f"📬 Запущена рассылка материалов по неделям: первое сообщение в этот чат "
+                    f"придёт примерно через {delay} мин., далее по расписанию.\n\n"
+                    f"Закрытый канал — по приглашению от бота (отдельным сообщением), если оно ещё не приходило."
                 )
-            )
+            else:
+                user_notice = (
+                    f"✅ Вам открыт доступ.\n\n"
+                    f"Тариф: {tariff_info['name']}\n\n"
+                    f"Следите за сообщениями от бота: уведомления о канале и сервисные сообщения."
+                )
+            await bot.send_message(chat_id=target_user_id, text=user_notice)
         except Exception as e:
             logger.warning(f"Не удалось отправить уведомление пользователю {target_user_id}: {e}")
     except Exception as e:

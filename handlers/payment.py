@@ -589,7 +589,8 @@ async def callback_unsubscribe(callback: CallbackQuery):
     customer_email = subscription.get("customer_email")
     customer_phone = subscription.get("customer_phone")
     
-    # для рекуррентной подписки сначала глушим Prodamus; при ошибке не трогаем БД и канал
+    # для рекуррентной подписки с привязкой к Prodamus сначала глушим API; при ошибке не трогаем БД и канал
+    # ручная выдача (/adduser): subscription_id нет — Prodamus не вызываем, отписка в боте проходит как раньше
     prodamus_ok = True
     prodamus_error = None
 
