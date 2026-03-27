@@ -1,7 +1,6 @@
 import hmac
 import hashlib
 import json
-import os
 import time
 import asyncio
 import logging
@@ -11,6 +10,7 @@ from config import (
     PRODAMUS_API_KEY,
     PRODAMUS_SYS,
     PRODAMUS_WEBHOOK_SECRET,
+    PRODAMUS_PAYFORM_URL,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,9 +24,9 @@ class ProdamusAPI:
         self.sys = PRODAMUS_SYS
         self.webhook_secret = PRODAMUS_WEBHOOK_SECRET
         # URL платежной формы (по документации: https://название_поддомена.payform.ru/)
-        # можно переопределить через переменную окружения PRODAMUS_PAYFORM_URL
-        # по умолчанию используем nugaeva.payform.ru
-        raw_payform_url = (os.getenv("PRODAMUS_PAYFORM_URL") or "").strip()
+        # берем значение из config, чтобы использовать единый источник env-переменных
+        # по умолчанию в config используется nugaeva.payform.ru
+        raw_payform_url = (PRODAMUS_PAYFORM_URL or "").strip()
 
         if not raw_payform_url:
             raw_payform_url = "https://nugaeva.payform.ru/"

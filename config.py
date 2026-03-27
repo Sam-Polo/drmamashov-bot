@@ -1,7 +1,10 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# загружаем .env строго из корня проекта, независимо от cwd процесса
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 
 # токен бота
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -19,7 +22,6 @@ CHANNEL_INVITE_LINK = os.getenv("CHANNEL_INVITE_LINK", "")
 
 # путь к БД
 # в Docker используем /app/data/bot.db, локально - bot.db
-import os
 DATABASE_PATH = os.getenv("DATABASE_PATH", "bot.db")
 
 # тарифы (в рублях)
