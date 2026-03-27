@@ -276,7 +276,11 @@ async def callback_subscription(callback: CallbackQuery):
     subscription = await db.get_user_subscription(user_id)
     has_subscription = subscription is not None
     text = get_subscription_status_text(subscription)
-    
+    if has_subscription:
+        from utils.newsletter_user_hint import get_subscription_newsletter_footer
+
+        text += await get_subscription_newsletter_footer(db, user_id)
+
     if not has_subscription:
         text = "Выбрать тариф:"
         await callback.message.edit_text(text, reply_markup=get_tariffs_menu())
