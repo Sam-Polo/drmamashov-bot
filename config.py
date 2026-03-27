@@ -57,3 +57,7 @@ NEWSLETTER_WEEK_SPACING_DAYS = int(os.getenv("NEWSLETTER_WEEK_SPACING_DAYS", "7"
 # как часто проверять очередь рассылки (сек)
 NEWSLETTER_CHECK_INTERVAL_SEC = int(os.getenv("NEWSLETTER_CHECK_INTERVAL_SEC", "60"))
 NEWSLETTER_INCLUDE_TRIAL = os.getenv("NEWSLETTER_INCLUDE_TRIAL", "0").strip().lower() in ("1", "true", "yes")
+
+# админ-команда /newsletter_test: сжатая имитация задержек продакшна (сек)
+NEWSLETTER_TEST_FIRST_DELAY_SEC = float(os.getenv("NEWSLETTER_TEST_FIRST_DELAY_SEC", "2"))
+NEWSLETTER_TEST_BETWEEN_WEEKS_SEC = float(os.getenv("NEWSLETTER_TEST_BETWEEN_WEEKS_SEC", "5"))

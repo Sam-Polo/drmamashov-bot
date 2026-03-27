@@ -79,6 +79,7 @@ async def cmd_help(message: Message):
 📢 Рассылка:
 /broadcast — рассылка сообщения всем пользователям
 /newsletter_status — проверить парсинг Google Doc (недели)
+/newsletter_test [user_id] — тест: все недели подряд с паузами (как прод), без сдвига очереди в БД
 
 🔧 Прочее:
 /unsubscribe — отписать пользователя (Prodamus + БД + канал)
@@ -127,6 +128,40 @@ async def cmd_newsletter_status(message: Message):
     except Exception as e:
         logger.error("newsletter_status: %s", e, exc_info=True)
         await message.answer(f"❌ Ошибка загрузки документа: {e}")
+
+
+@router.message(Command("newsletter_test"))
+async def cmd_newsletter_test(message: Message, bot: Bot):
+    """тест рассылки: все недели из doc, паузы из NEWSLETTER_TEST_*_SEC, проверка подписки перед каждой"""
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("❌ У вас нет доступа к этой команде.")
+        return
+
+    from config import (
+        NEWSLETTER_GOOGLE_DOC_ID,
+        NEWSLETTER_TEST_FIRST_DELAY_SEC,
+        NEWSLETTER_TEST_BETWEEN_WEEKS_SEC,
+    )
+
+    if not NEWSLETTER_GOOGLE_DOC_ID:
+        await message.answer("NEWSLETTER_GOOGLE_DOC_ID пустой в .env")
+        return
+
+    parts = (message.text or "").split()
+    target_user_id = message.from_user.id
+    if len(parts) >= 2 and parts[1].isdigit():
+        target_user_id = int(parts[1])
+
+    await message.answer(
+        f"🧪 Тест рассылки → user_id={target_user_id}\n"
+        f"пауза до недели 1: {NEWSLETTER_TEST_FIRST_DELAY_SEC} с; между неделями: {NEWSLETTER_TEST_BETWEEN_WEEKS_SEC} с\n"
+        f"(имитация продакшна; прогресс рассылки в БД не меняется)"
+    )
+
+    from newsletter.e2e_test import run_newsletter_e2e_test
+
+    ok, report = await run_newsletter_e2e_test(bot, db, NEWSLETTER_GOOGLE_DOC_ID, target_user_id)
+    await message.answer(("✅ " if ok else "❌ ") + report)
 
 
 @router.message(Command("users"))
