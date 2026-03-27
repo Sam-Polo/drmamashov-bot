@@ -37,16 +37,12 @@ class PaymentStates(StatesGroup):
 
 
 def _normalize_phone(raw_phone: str) -> str | None:
-    """нормализует номер телефона в формат +79991234567"""
+    """проверяет номер строго в формате +79991234567"""
     if not raw_phone:
         return None
-    cleaned = raw_phone.strip().replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
-    if cleaned.startswith("8") and len(cleaned) == 11:
-        cleaned = f"+7{cleaned[1:]}"
-    if cleaned.startswith("+") and cleaned[1:].isdigit() and 10 <= len(cleaned[1:]) <= 15:
+    cleaned = raw_phone.strip()
+    if len(cleaned) == 12 and cleaned.startswith("+7") and cleaned[2:].isdigit():
         return cleaned
-    if cleaned.isdigit() and 10 <= len(cleaned) <= 15:
-        return f"+{cleaned}"
     return None
 
 
@@ -112,7 +108,7 @@ async def process_email_for_payment(message: Message, state: FSMContext):
         [InlineKeyboardButton(text="◀️ Отмена", callback_data="subscription")]
     ])
     await message.answer(
-        "📱 Теперь введите номер телефона в международном формате.\n\n"
+        "📱 Теперь введите номер телефона строго в формате +79991234567.\n\n"
         "Пример: +79991234567\n\n"
         "Телефон нужен для привязки клиента в платежной системе.",
         reply_markup=keyboard
@@ -128,7 +124,7 @@ async def process_phone_for_payment(message: Message, state: FSMContext):
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="subscription")]
         ])
         await message.answer(
-            "❌ Неверный формат телефона. Попробуйте ещё раз:\n\n"
+            "❌ Неверный формат телефона. Нужен строго формат +79991234567.\n\n"
             "Пример: +79991234567",
             reply_markup=keyboard
         )
