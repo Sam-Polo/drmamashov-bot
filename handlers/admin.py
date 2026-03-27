@@ -387,9 +387,20 @@ async def process_unsubscribe_user(message: Message, state: FSMContext, bot: Bot
     if subscription_data:
         subscription = subscription_data.get("prodamus_subscription_id")
         customer_email = subscription_data.get("customer_email")
+        customer_phone = subscription_data.get("customer_phone")
         if subscription:
             # есть subscription - сразу отписываем (используем email если есть)
-            await _perform_unsubscribe(message, state, bot, user_id, subscription, subscription_data, None, customer_email)
+            await _perform_unsubscribe(
+                message,
+                state,
+                bot,
+                user_id,
+                subscription,
+                subscription_data,
+                None,
+                customer_email,
+                customer_phone
+            )
             return
     
     # подписки нет в БД или нет subscription - запрашиваем вручную
@@ -477,7 +488,7 @@ async def process_unsubscribe_subscription_id(message: Message, state: FSMContex
 
 async def _perform_unsubscribe(message: Message, state: FSMContext, bot: Bot, 
                                user_id: int, subscription: str, subscription_data: dict = None,
-                               profile_id: int = None, customer_email: str = None):
+                               profile_id: int = None, customer_email: str = None, customer_phone: str = None):
     """выполнение отписки: Prodamus API + БД + канал"""
     await state.clear()
     
@@ -493,6 +504,7 @@ async def _perform_unsubscribe(message: Message, state: FSMContext, bot: Bot,
             success, error_msg = await prodamus_client.set_subscription_activity(
                 subscription=subscription,
                 customer_email=customer_email,
+                customer_phone=customer_phone,
                 active=False,
                 as_manager=True
             )

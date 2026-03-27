@@ -117,6 +117,7 @@ class ProdamusWebhookHandler:
         
         # получаем email клиента
         customer_email = data.get("customer_email", "")
+        customer_phone = data.get("customer_phone", "")
         
         # проверяем, был ли использован промокод для этого заказа
         # пробуем сначала по order_num, потом по order_id
@@ -179,9 +180,15 @@ class ProdamusWebhookHandler:
                 duration_days,
                 prodamus_subscription_id=gift_subscription_id,
                 prodamus_order_id=gift_order_id,
-                customer_email=customer_email if not is_gift else None
+                customer_email=customer_email if not is_gift else None,
+                customer_phone=customer_phone if not is_gift else None
             )
-            logger.info(f"Создана подписка для user_id={recipient_user_id}, tariff_type={tariff_type}, is_gift={is_gift}, subscription_id={'None (подарок)' if is_gift else subscription_id}, email={customer_email}")
+            masked_phone = f"***{customer_phone[-4:]}" if customer_phone and len(customer_phone) >= 4 else "None"
+            logger.info(
+                f"Создана подписка для user_id={recipient_user_id}, tariff_type={tariff_type}, "
+                f"is_gift={is_gift}, subscription_id={'None (подарок)' if is_gift else subscription_id}, "
+                f"email={customer_email}, phone={masked_phone}"
+            )
         except Exception as e:
             logger.error(f"Ошибка при создании подписки в БД: {e}", exc_info=True)
             return

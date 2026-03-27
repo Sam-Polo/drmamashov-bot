@@ -99,6 +99,8 @@ def get_subscription_status_text(subscription: dict = None):
         # показываем email если есть
         if subscription.get('customer_email'):
             text += f"\n📧 Email: {subscription['customer_email']}"
+        if subscription.get('customer_phone'):
+            text += f"\n📱 Телефон: {subscription['customer_phone']}"
     
     return text
 

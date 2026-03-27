@@ -72,7 +72,8 @@ class ProdamusAPI:
         promocode: Optional[str] = None,
         discount_amount: Optional[int] = None,
         order_id_override: Optional[str] = None,
-        customer_email: Optional[str] = None
+        customer_email: Optional[str] = None,
+        customer_phone: Optional[str] = None
     ) -> Optional[str]:
         """создание ссылки на оплату
         
@@ -82,6 +83,7 @@ class ProdamusAPI:
         Args:
             product_id_override: опциональный product_id для переопределения (например, для акций)
             customer_email: email клиента для привязки подписки
+            customer_phone: телефон клиента для привязки подписки
         """
         # определяем product_id на основе тарифа
         # для monthly и half_year - это ID подписок в Prodamus
@@ -148,8 +150,14 @@ class ProdamusAPI:
         # email клиента обязателен для формирования подписи и привязки подписки
         # tg_user_id НЕ передаем в подпись, он сохраняется только в order_id
         data["customer_email"] = customer_email
+        if customer_phone:
+            data["customer_phone"] = customer_phone
         
-        logger.info(f"Формирование ссылки для тарифа {tariff_type}, product_id={product_id}, email={customer_email}")
+        masked_phone = f"***{customer_phone[-4:]}" if customer_phone and len(customer_phone) >= 4 else "None"
+        logger.info(
+            f"Формирование ссылки для тарифа {tariff_type}, product_id={product_id}, "
+            f"email={customer_email}, phone={masked_phone}"
+        )
         
         timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=10)
         import ssl
@@ -409,6 +417,7 @@ class ProdamusAPI:
         subscription: str, 
         profile_id: int = None,
         customer_email: str = None,
+        customer_phone: str = None,
         active: bool = False,
         as_manager: bool = True
     ) -> tuple:
@@ -418,13 +427,19 @@ class ProdamusAPI:
             subscription: ID подписки в Prodamus (строка или число)
             profile_id: ID профиля клиента в Prodamus (опционально)
             customer_email: email клиента (используется для формирования подписи)
+            customer_phone: телефон клиента (используется для формирования подписи)
             active: False для деактивации, True для активации
             as_manager: True - от лица менеджера, False - от лица пользователя
             
         Returns:
             tuple: (success: bool, error_message: str or None)
         """
-        logger.info(f"🔄 setActivity: subscription={subscription}, profile_id={profile_id}, customer_email={customer_email}, active={active}, as_manager={as_manager}")
+        masked_phone = f"***{customer_phone[-4:]}" if customer_phone and len(customer_phone) >= 4 else "None"
+        logger.info(
+            f"🔄 setActivity: subscription={subscription}, profile_id={profile_id}, "
+            f"customer_email={customer_email}, customer_phone={masked_phone}, "
+            f"active={active}, as_manager={as_manager}"
+        )
         
         data = {
             "subscription": subscription,
@@ -434,6 +449,8 @@ class ProdamusAPI:
         # tg_user_id НЕ используем для подписи
         if customer_email:
             data["customer_email"] = customer_email
+            if customer_phone:
+                data["customer_phone"] = customer_phone
         elif profile_id:
             data["profile"] = profile_id
         

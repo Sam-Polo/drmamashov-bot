@@ -51,6 +51,11 @@ class Database:
                 await db.execute("ALTER TABLE subscriptions ADD COLUMN customer_email TEXT")
             except:
                 pass  # поле уже существует
+
+            try:
+                await db.execute("ALTER TABLE subscriptions ADD COLUMN customer_phone TEXT")
+            except:
+                pass  # поле уже существует
             
             # таблица промокодов
             # проверяем структуру существующей таблицы
@@ -324,7 +329,8 @@ class Database:
         duration_days: Optional[int],
         prodamus_subscription_id: Optional[str] = None,
         prodamus_order_id: Optional[str] = None,
-        customer_email: Optional[str] = None
+        customer_email: Optional[str] = None,
+        customer_phone: Optional[str] = None
     ):
         """создание новой подписки"""
         async with aiosqlite.connect(self.db_path) as db:
@@ -342,9 +348,21 @@ class Database:
                 end_date = start_date + timedelta(days=duration_days)
             
             await db.execute("""
-                INSERT INTO subscriptions (user_id, tariff_type, start_date, end_date, is_active, prodamus_subscription_id, prodamus_order_id, customer_email)
-                VALUES (?, ?, ?, ?, 1, ?, ?, ?)
-            """, (user_id, tariff_type, start_date, end_date, prodamus_subscription_id, prodamus_order_id, customer_email))
+                INSERT INTO subscriptions (
+                    user_id, tariff_type, start_date, end_date, is_active,
+                    prodamus_subscription_id, prodamus_order_id, customer_email, customer_phone
+                )
+                VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
+            """, (
+                user_id,
+                tariff_type,
+                start_date,
+                end_date,
+                prodamus_subscription_id,
+                prodamus_order_id,
+                customer_email,
+                customer_phone
+            ))
             await db.commit()
     
     async def create_migration_subscription(

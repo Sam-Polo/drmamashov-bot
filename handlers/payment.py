@@ -33,6 +33,21 @@ class GiftSubscriptionStates(StatesGroup):
 
 class PaymentStates(StatesGroup):
     waiting_for_email = State()
+    waiting_for_phone = State()
+
+
+def _normalize_phone(raw_phone: str) -> str | None:
+    """нормализует номер телефона в формат +79991234567"""
+    if not raw_phone:
+        return None
+    cleaned = raw_phone.strip().replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+    if cleaned.startswith("8") and len(cleaned) == 11:
+        cleaned = f"+7{cleaned[1:]}"
+    if cleaned.startswith("+") and cleaned[1:].isdigit() and 10 <= len(cleaned[1:]) <= 15:
+        return cleaned
+    if cleaned.isdigit() and 10 <= len(cleaned) <= 15:
+        return f"+{cleaned}"
+    return None
 
 
 @router.callback_query(F.data.startswith("tariff_"))
@@ -64,7 +79,7 @@ async def callback_tariff_selected(callback: CallbackQuery, state: FSMContext):
 
 @router.message(PaymentStates.waiting_for_email)
 async def process_email_for_payment(message: Message, state: FSMContext):
-    """обработка введённого email и создание ссылки на оплату"""
+    """обработка введённого email и переход к вводу телефона"""
     import re
     
     email = (message.text or "").strip().lower()
@@ -90,32 +105,72 @@ async def process_email_for_payment(message: Message, state: FSMContext):
         await message.answer("❌ Ошибка: тариф не найден. Попробуйте снова.")
         return
     
+    await state.update_data(customer_email=email)
+    await state.set_state(PaymentStates.waiting_for_phone)
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Отмена", callback_data="subscription")]
+    ])
+    await message.answer(
+        "📱 Теперь введите номер телефона в международном формате.\n\n"
+        "Пример: +79991234567\n\n"
+        "Телефон нужен для привязки клиента в платежной системе.",
+        reply_markup=keyboard
+    )
+
+
+@router.message(PaymentStates.waiting_for_phone)
+async def process_phone_for_payment(message: Message, state: FSMContext):
+    """обработка введённого телефона и создание ссылки на оплату"""
+    phone = _normalize_phone(message.text or "")
+    if not phone:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Отмена", callback_data="subscription")]
+        ])
+        await message.answer(
+            "❌ Неверный формат телефона. Попробуйте ещё раз:\n\n"
+            "Пример: +79991234567",
+            reply_markup=keyboard
+        )
+        return
+
+    data = await state.get_data()
+    tariff_type = data.get("tariff_type")
+    email = data.get("customer_email")
+
+    if not tariff_type or tariff_type not in TARIFFS or not email:
+        await state.clear()
+        await message.answer("❌ Ошибка: данные оплаты потеряны. Попробуйте снова.")
+        return
+
     user_id = message.from_user.id
     tariff_info = TARIFFS[tariff_type]
-    
+
     await state.clear()
-    
+
     # показываем сообщение о загрузке
     loading_msg = await message.answer("⏳ Создаю ссылку на оплату...")
-    
-    # создаем ссылку на оплату с email
+
+    # создаем ссылку на оплату с email и телефоном
     payment_url = await prodamus_api.create_payment_link(
         user_id=user_id,
         tariff_type=tariff_type,
         tariff_price=tariff_info["price"],
         tariff_name=tariff_info["name"],
         duration_days=tariff_info["duration_days"],
-        customer_email=email
+        customer_email=email,
+        customer_phone=phone
     )
-    
+
     if not payment_url:
         text = "❌ Ошибка создания ссылки на оплату.\n\nПопробуйте ещё раз или обратитесь в поддержку."
         await loading_msg.edit_text(text, reply_markup=get_back_to_main())
         return
-    
+
     text = f"""💳 Оплата подписки "{tariff_info['name']}"
 
 📧 Email: {email}
+📱 Телефон: {phone}
 💰 Сумма: {tariff_info['price']}₽
 
 Нажмите на кнопку ниже, чтобы перейти к оплате."""
@@ -481,6 +536,7 @@ async def callback_unsubscribe(callback: CallbackQuery):
     tariff_type = subscription.get("tariff_type")
     subscription_id = subscription.get("prodamus_subscription_id")
     customer_email = subscription.get("customer_email")
+    customer_phone = subscription.get("customer_phone")
     
     if tariff_type not in ["lifetime", "trial"] and subscription_id:
         try:
@@ -489,6 +545,7 @@ async def callback_unsubscribe(callback: CallbackQuery):
                 success, error_msg = await prodamus_api.set_subscription_activity(
                     subscription=str(subscription_id),
                     customer_email=customer_email,
+                    customer_phone=customer_phone,
                     active=False,
                     as_manager=True
                 )
