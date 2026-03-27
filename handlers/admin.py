@@ -90,6 +90,42 @@ async def cmd_help(message: Message):
     await message.answer(text)
 
 
+@router.message(Command("admins"))
+async def cmd_admins(message: Message):
+    """список admin ids из конфига (+ username из БД, если есть); в /help не выводим"""
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("❌ У вас нет доступа к этой команде.")
+        return
+
+    if not ADMIN_IDS:
+        await message.answer("ADMIN_IDS пуст в конфиге.")
+        return
+
+    lines = ["👤 <b>Администраторы</b> (ADMIN_IDS):"]
+    for aid in ADMIN_IDS:
+        username = None
+        first_name = None
+        try:
+            async with aiosqlite.connect(db.db_path) as conn:
+                conn.row_factory = aiosqlite.Row
+                async with conn.execute(
+                    "SELECT username, first_name FROM users WHERE user_id = ?",
+                    (aid,),
+                ) as cur:
+                    row = await cur.fetchone()
+            if row:
+                username = row["username"]
+                first_name = row["first_name"]
+        except Exception as e:
+            logger.warning("admins: не удалось прочитать users для user_id=%s: %s", aid, e)
+
+        u = f"@{username}" if username else "username нет в БД"
+        fn = f" — {first_name}" if first_name else ""
+        lines.append(f"• <code>{aid}</code> {u}{fn}")
+
+    await message.answer("\n".join(lines), parse_mode="HTML")
+
+
 @router.message(Command("newsletter_status"))
 async def cmd_newsletter_status(message: Message):
     """проверка: doc id, настройки, число недель в документе (админ)"""
