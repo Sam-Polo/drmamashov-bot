@@ -451,6 +451,9 @@ class ProdamusAPI:
             data["customer_email"] = customer_email
             if customer_phone:
                 data["customer_phone"] = customer_phone
+        elif customer_phone:
+            # идентификация только по телефону (rest setActivity)
+            data["customer_phone"] = customer_phone
         elif profile_id:
             data["profile"] = profile_id
         

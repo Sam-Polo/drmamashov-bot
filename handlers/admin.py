@@ -420,8 +420,10 @@ async def process_unsubscribe_user(message: Message, state: FSMContext, bot: Bot
         "Введите данные для отписки в одном из форматов:\n"
         "• <code>subscription</code>\n"
         "• <code>subscription:profile_id</code>\n"
-        "• <code>subscription:email:user@example.com</code>\n\n"
+        "• <code>subscription:email:user@example.com</code>\n"
+        "• <code>subscription:phone:+79991234567</code>\n\n"
         "Пример: <code>2694662:email:test@mail.ru</code>\n"
+        "Пример: <code>2694662:phone:+79991234567</code>\n"
         "(данные можно найти в ЛК Prodamus)\n\n"
         "Для отмены отправьте /cancel",
         parse_mode="HTML"
@@ -450,18 +452,22 @@ async def process_unsubscribe_subscription_id(message: Message, state: FSMContex
         )
         return
     
-    # парсим формат: subscription или subscription:profile_id или subscription:email:xxx
+    # парсим формат: subscription или subscription:profile_id или subscription:email:xxx или subscription:phone:+7...
     subscription = None
     profile_id = None
     customer_email = None
+    customer_phone = None
     
     if ":" in text:
         parts = text.split(":")
         subscription = parts[0].strip()
         
         if len(parts) >= 3 and parts[1].strip().lower() == "email":
-            # формат subscription:email:xxx@yyy.com
-            customer_email = parts[2].strip()
+            # формат subscription:email:xxx@yyy.com (email может содержать @ дальше без лишних :)
+            customer_email = ":".join(parts[2:]).strip()
+        elif len(parts) >= 3 and parts[1].strip().lower() == "phone":
+            # формат subscription:phone:+79991234567
+            customer_phone = ":".join(parts[2:]).strip()
         elif len(parts) >= 2:
             # формат subscription:profile_id
             try:
@@ -483,7 +489,10 @@ async def process_unsubscribe_subscription_id(message: Message, state: FSMContex
     user_id = data.get("unsubscribe_user_id")
     subscription_data = data.get("unsubscribe_data")
     
-    await _perform_unsubscribe(message, state, bot, user_id, subscription, subscription_data, profile_id, customer_email)
+    await _perform_unsubscribe(
+        message, state, bot, user_id, subscription, subscription_data,
+        profile_id, customer_email, customer_phone
+    )
 
 
 async def _perform_unsubscribe(message: Message, state: FSMContext, bot: Bot, 
@@ -498,7 +507,7 @@ async def _perform_unsubscribe(message: Message, state: FSMContext, bot: Bot,
     prodamus_client = ProdamusAPI()
     prodamus_success = False
     
-    # попытка 1: если есть customer_email (самый надёжный способ)
+    # попытка: email (+ опционально телефон), при ошибке — только email
     if customer_email:
         try:
             success, error_msg = await prodamus_client.set_subscription_activity(
@@ -508,6 +517,14 @@ async def _perform_unsubscribe(message: Message, state: FSMContext, bot: Bot,
                 active=False,
                 as_manager=True
             )
+            if not success and customer_phone:
+                success, error_msg = await prodamus_client.set_subscription_activity(
+                    subscription=subscription,
+                    customer_email=customer_email,
+                    customer_phone=None,
+                    active=False,
+                    as_manager=True
+                )
             if success:
                 prodamus_success = True
                 results.append(f"✅ Prodamus: подписка деактивирована (email={customer_email})")
@@ -517,7 +534,25 @@ async def _perform_unsubscribe(message: Message, state: FSMContext, bot: Bot,
             logger.error(f"Ошибка при отписке в Prodamus (email): {e}", exc_info=True)
             results.append(f"❌ Prodamus (email): ошибка - {e}")
     
-    # попытка 2: если есть profile_id
+    # только телефон
+    if not prodamus_success and customer_phone and not customer_email:
+        try:
+            success, error_msg = await prodamus_client.set_subscription_activity(
+                subscription=subscription,
+                customer_phone=customer_phone,
+                active=False,
+                as_manager=True
+            )
+            if success:
+                prodamus_success = True
+                results.append("✅ Prodamus: подписка деактивирована (телефон)")
+            else:
+                results.append(f"❌ Prodamus (phone): {error_msg}")
+        except Exception as e:
+            logger.error(f"Ошибка при отписке в Prodamus (phone): {e}", exc_info=True)
+            results.append(f"❌ Prodamus (phone): ошибка - {e}")
+    
+    # если есть profile_id
     if not prodamus_success and profile_id:
         try:
             success, error_msg = await prodamus_client.set_subscription_activity(
@@ -535,13 +570,11 @@ async def _perform_unsubscribe(message: Message, state: FSMContext, bot: Bot,
             logger.error(f"Ошибка при отписке в Prodamus (profile): {e}", exc_info=True)
             results.append(f"❌ Prodamus (profile): ошибка - {e}")
     
-    # если ни email, ни profile_id не сработали — выводим ошибку
-    # tg_user_id больше не используется для формирования подписи
     if not prodamus_success:
-        results.append("❌ Prodamus: не удалось отписать (нужен email или profile_id)")
+        results.append("❌ Prodamus: не удалось отписать (нужен email, phone или profile_id)")
     
-    # 2. Деактивируем подписку в БД (если есть)
-    if subscription_data:
+    # 2. Деактивируем подписку в БД и канал только если Prodamus прошёл (или нечего было глушить)
+    if subscription_data and prodamus_success:
         try:
             webhook_data = {
                 "subscription_id": subscription,
@@ -555,8 +588,9 @@ async def _perform_unsubscribe(message: Message, state: FSMContext, bot: Bot,
         except Exception as e:
             logger.error(f"Ошибка при деактивации в БД: {e}", exc_info=True)
             results.append(f"❌ БД: ошибка - {e}")
-    else:
-        # пробуем забанить в канале вручную
+    elif subscription_data and not prodamus_success:
+        results.append("⚠️ БД и канал не тронуты — сначала нужно отписать в Prodamus.")
+    elif not subscription_data and prodamus_success:
         try:
             if CHANNEL_ID:
                 await bot.ban_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
@@ -564,6 +598,8 @@ async def _perform_unsubscribe(message: Message, state: FSMContext, bot: Bot,
         except Exception as e:
             logger.warning(f"Ошибка при бане в канале: {e}")
             results.append(f"⚠️ Канал: {e}")
+    elif not subscription_data and not prodamus_success:
+        results.append("⚠️ Нет записи в БД, Prodamus не отписан — канал не трогал.")
     
     await message.answer(
         f"🚫 Результат отписки пользователя {user_id}:\n\n"

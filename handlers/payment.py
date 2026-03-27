@@ -589,10 +589,17 @@ async def callback_unsubscribe(callback: CallbackQuery):
     customer_email = subscription.get("customer_email")
     customer_phone = subscription.get("customer_phone")
     
+    # для рекуррентной подписки сначала глушим Prodamus; при ошибке не трогаем БД и канал
+    prodamus_ok = True
+    prodamus_error = None
+
     if tariff_type not in ["lifetime", "trial"] and subscription_id:
-        try:
-            # используем email для отписки (tg_user_id не используется для подписи)
-            if customer_email:
+        if not customer_email:
+            prodamus_ok = False
+            prodamus_error = "В профиле нет email для отмены в Prodamus."
+            logger.warning(f"Нет email для отмены подписки в Prodamus, user_id={user_id}")
+        else:
+            try:
                 success, error_msg = await prodamus_api.set_subscription_activity(
                     subscription=str(subscription_id),
                     customer_email=customer_email,
@@ -600,24 +607,48 @@ async def callback_unsubscribe(callback: CallbackQuery):
                     active=False,
                     as_manager=True
                 )
+                # подписка могла быть создана только с email — повтор без телефона
+                if not success and customer_phone:
+                    logger.info("setActivity не прошёл с телефоном, пробую только email")
+                    success, error_msg = await prodamus_api.set_subscription_activity(
+                        subscription=str(subscription_id),
+                        customer_email=customer_email,
+                        customer_phone=None,
+                        active=False,
+                        as_manager=True
+                    )
                 if not success:
-                    logger.warning(f"Не удалось отменить подписку через Prodamus API для пользователя {user_id}: {error_msg}")
+                    prodamus_ok = False
+                    prodamus_error = error_msg or "ошибка Prodamus"
+                    logger.warning(
+                        f"Не удалось отменить подписку через Prodamus API для пользователя {user_id}: {prodamus_error}"
+                    )
                 else:
                     logger.info(f"✅ Подписка отменена в Prodamus для пользователя {user_id}, email={customer_email}")
-            else:
-                logger.warning(f"Нет email для отмены подписки в Prodamus, user_id={user_id}")
-        except Exception as e:
-            logger.error(f"Ошибка при отмене подписки в Prodamus: {e}")
-    
+            except Exception as e:
+                prodamus_ok = False
+                prodamus_error = str(e)
+                logger.error(f"Ошибка при отмене подписки в Prodamus: {e}")
+
+    if not prodamus_ok:
+        text = (
+            "⚠️ По техническим причинам отменить платную подписку в платёжной системе не удалось.\n\n"
+            "Ваша подписка в боте и доступ к каналу сохранены.\n\n"
+            "Напишите в техподдержку — помогут завершить отписку."
+        )
+        await callback.message.edit_text(text, reply_markup=get_back_to_main())
+        await callback.answer()
+        return
+
     await db.deactivate_subscription(user_id)
-    
+
     try:
         if CHANNEL_ID:
             bot = callback.bot
             await bot.ban_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
     except Exception as e:
         logger.error(f"Ошибка при удалении пользователя {user_id} из канала: {e}", exc_info=True)
-    
+
     text = "❌ Вы отписались от канала. Доступ прекращен."
     await callback.message.edit_text(text, reply_markup=get_back_to_main())
     await callback.answer()
