@@ -21,7 +21,3 @@
 | **Webhook-сервис** | `WEBHOOK_PORT` |
 | **Версия / логи** | `APP_VERSION` |
 | **Рассылка** | `NEWSLETTER_ENABLED`, `NEWSLETTER_GOOGLE_DOC_ID`, `NEWSLETTER_FIRST_SEND_DELAY_MINUTES`, `NEWSLETTER_WEEK_SPACING_DAYS`, `NEWSLETTER_CHECK_INTERVAL_SEC`, `NEWSLETTER_INCLUDE_TRIAL`, опционально `NEWSLETTER_TEST_*` для админ-теста |
-
-Секреты (токены, ключи API) в репозиторий не коммитить — только в локальный `.env` и в секреты CI/сервера.
-
-Дополнительно: деплой и пайплайн — **`CICD.md`**, развёртывание — **`DEPLOY.md`**.

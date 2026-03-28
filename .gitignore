@@ -21,3 +21,5 @@ env/
 nugaeva-dance-bot/
 *.log
 TESP.md
+DEPLOY.md
+CICD.md
