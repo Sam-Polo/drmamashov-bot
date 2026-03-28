@@ -9,6 +9,10 @@ load_dotenv(BASE_DIR / ".env")
 # токен бота
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BOT_USERNAME = os.getenv("BOT_USERNAME", "")  # username бота (без @)
+# аккаунт техподдержки (кнопка «задать вопрос», текст раздела), без @
+SUPPORT_TELEGRAM_USERNAME = (
+    os.getenv("SUPPORT_TELEGRAM_USERNAME", "mbuhtojarova").strip().lstrip("@")
+)
 
 # id администраторов (для админ-команд, через запятую)
 ADMIN_IDS = [int(admin_id.strip()) for admin_id in os.getenv("ADMIN_IDS", "0").split(",") if admin_id.strip()]

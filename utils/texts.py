@@ -1,4 +1,4 @@
-from config import TARIFFS
+from config import TARIFFS, SUPPORT_TELEGRAM_USERNAME
 
 
 def get_about_channel_text():
@@ -107,7 +107,7 @@ def get_subscription_status_text(subscription: dict = None):
 
 def get_support_text():
     """текст службы поддержки"""
-    return """💬 Служба поддержки
+    return f"""💬 Служба поддержки
 
 По всем вопросам обращайтесь к нашей поддержке:
-@nugaevahelps"""
+@{SUPPORT_TELEGRAM_USERNAME}"""

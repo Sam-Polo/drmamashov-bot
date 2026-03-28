@@ -1,5 +1,5 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from config import TARIFFS
+from config import TARIFFS, SUPPORT_TELEGRAM_USERNAME
 
 
 def get_main_menu():
@@ -8,7 +8,10 @@ def get_main_menu():
         [InlineKeyboardButton(text="💳 Подписаться", callback_data="subscription")],
         [InlineKeyboardButton(text="📖 О рассылке", callback_data="about_channel")],
         # [InlineKeyboardButton(text="🎁 Подарить подписку", callback_data="gift_select_tariff")],  # временно скрыто
-        [InlineKeyboardButton(text="❓ Задать вопрос", url="https://t.me/nugaevahelps")],
+        [InlineKeyboardButton(
+            text="❓ Задать вопрос",
+            url=f"https://t.me/{SUPPORT_TELEGRAM_USERNAME}",
+        )],
     ])
     return keyboard
 
