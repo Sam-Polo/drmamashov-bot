@@ -1,55 +1,27 @@
-# Телеграм-бот для подписки на закрытый канал
+# drmamashov-bot
 
-Бот для управления подписками на закрытый телеграм-канал.
+Телеграм-бот для продажи подписки на закрытый канал: оплата и рекуррент через **Prodamus**, выдача доступа в канал, ручные админ-операции. Отдельно — **рассылка «недель»** из публичного Google Doc (текст по графику от момента активации подписки). Есть HTTP-приём webhook Prodamus (отдельный процесс в docker-compose).
 
-## Установка
+## Стек
 
-1. Установите зависимости:
-```bash
-pip install -r requirements.txt
-```
+- **Python 3**, **aiogram 3**, SQLite (**aiosqlite**)
+- **aiohttp** — Google Doc export, запросы к Prodamus
+- **python-dotenv** — конфиг из `.env` в корне проекта
+- **Docker / docker-compose** — типовой запуск (бот + webhook), том под БД
 
-2. Создайте файл `.env`:
-```bash
-BOT_TOKEN=your_bot_token_here
-ADMIN_IDS=123456789,987654321
-CHANNEL_ID=@channel_name
-```
+## Переменные окружения
 
-Где:
-- `BOT_TOKEN` - токен бота от @BotFather
-- `ADMIN_IDS` - ID администраторов через запятую (можно узнать у @userinfobot)
-- `CHANNEL_ID` - username канала с @ (например @mychannel) или числовой ID (например -1001234567890)
+См. полный перечень и плейсхолдеры в **`.env.example`**. Кратко по смыслу:
 
-3. Запустите бота:
-```bash
-python bot.py
-```
+| Группа | Переменные |
+|--------|------------|
+| **Telegram** | `BOT_TOKEN`, `BOT_USERNAME`, `ADMIN_IDS`, `CHANNEL_ID`, `CHANNEL_INVITE_LINK`, `SUPPORT_TELEGRAM_USERNAME` |
+| **БД** | `DATABASE_PATH` (в контейнере обычно `/app/data/bot.db`) |
+| **Prodamus** | `PRODAMUS_API_KEY`, `PRODAMUS_SYS`, `PRODAMUS_WEBHOOK_SECRET`, `PRODAMUS_WEBHOOK_URL`, `PRODAMUS_PAYFORM_URL`, `PRODAMUS_PRODUCT_ID_MONTHLY`, `PRODAMUS_PRODUCT_ID_LIFETIME` |
+| **Webhook-сервис** | `WEBHOOK_PORT` |
+| **Версия / логи** | `APP_VERSION` |
+| **Рассылка** | `NEWSLETTER_ENABLED`, `NEWSLETTER_GOOGLE_DOC_ID`, `NEWSLETTER_FIRST_SEND_DELAY_MINUTES`, `NEWSLETTER_WEEK_SPACING_DAYS`, `NEWSLETTER_CHECK_INTERVAL_SEC`, `NEWSLETTER_INCLUDE_TRIAL`, опционально `NEWSLETTER_TEST_*` для админ-теста |
 
-## Структура проекта
+Секреты (токены, ключи API) в репозиторий не коммитить — только в локальный `.env` и в секреты CI/сервера.
 
-- `bot.py` - точка входа
-- `config.py` - конфигурация
-- `database/models.py` - модели БД
-- `handlers/` - обработчики команд и callback'ов
-- `keyboards/` - inline-клавиатуры
-- `utils/` - утилиты
-
-## Функционал
-
-- Главное меню с разделами
-- Раздел "О канале" с реквизитами и офертой
-- Раздел "Подписка" с выбором тарифа и оплатой через Prodamus
-- Служба поддержки
-- Бесплатные видео (редирект на канал)
-- Админ-команды для просмотра пользователей
-- Интеграция с Prodamus для рекуррентных платежей
-
-## Деплой
-
-📖 Подробная инструкция по деплою: см. `DEPLOY.md`
-
-## Интеграция с Prodamus
-
-📖 Инструкция по настройке: см. `PRODAMUS_SETUP.md`
-
+Дополнительно: деплой и пайплайн — **`CICD.md`**, развёртывание — **`DEPLOY.md`**.
