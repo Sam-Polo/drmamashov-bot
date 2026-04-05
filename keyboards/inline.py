@@ -2,18 +2,21 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import TARIFFS, SUPPORT_TELEGRAM_USERNAME, _fmt
 
 
-def get_main_menu():
-    """главное меню с разделами"""
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+def get_main_menu(has_active_subscription: bool = False):
+    """главное меню с разделами; отписка — только при активной подписке"""
+    rows = [
         [InlineKeyboardButton(text="💳 Подписаться", callback_data="subscription")],
         [InlineKeyboardButton(text="📖 О рассылке", callback_data="about_channel")],
-        # [InlineKeyboardButton(text="🎁 Подарить подписку", callback_data="gift_select_tariff")],  # временно скрыто
-        [InlineKeyboardButton(
+    ]
+    if has_active_subscription:
+        rows.append([InlineKeyboardButton(text="❌ Отписаться", callback_data="unsubscribe")])
+    rows.append([
+        InlineKeyboardButton(
             text="❓ Задать вопрос",
             url=f"https://t.me/{SUPPORT_TELEGRAM_USERNAME}",
-        )],
+        ),
     ])
-    return keyboard
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def get_about_channel_menu():

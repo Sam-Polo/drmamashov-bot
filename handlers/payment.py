@@ -7,20 +7,15 @@ from aiogram.fsm.state import State, StatesGroup
 from database.models import Database
 from prodamus.api import ProdamusAPI
 from keyboards.inline import get_back_to_main, get_main_menu
+from keyboards.reply import get_phone_request_keyboard
 from config import DATABASE_PATH, TARIFFS, CHANNEL_ID, GIFTS_ENABLED, PROMOCODES_ENABLED
+from handlers.common import WELCOME_TEXT
 
 logger = logging.getLogger(__name__)
 
 router = Router()
 db = Database(DATABASE_PATH)
 prodamus_api = ProdamusAPI()
-
-# приветственный текст для возврата в меню
-WELCOME_TEXT = """Привет, рада тебя видеть!
-
-Приглашаю в мужской журнал: ты можешь смотреть больше моих фотографий каждый день и читать статьи от специалистов по психологии для мужчин.
-
-Здесь же будут зарядки, которые подходят мужчинам и женщинам. Подключайся к нашему журналу, это просто и совсем недорого =)"""
 
 
 class PromocodeStates(StatesGroup):
@@ -149,36 +144,101 @@ async def process_email_for_payment(message: Message, state: FSMContext):
     await state.update_data(customer_email=email)
     await state.set_state(PaymentStates.waiting_for_phone)
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    inline_kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="◀️ Отмена", callback_data="subscription")]
     ])
     await _render_payment_menu(
         message,
         state,
-        "📱 Теперь введите номер телефона строго в формате +79991234567.\n\n"
-        "Пример: +79991234567\n\n"
+        "📱 Поделитесь номером через кнопку ниже или введите вручную в формате +79991234567.\n\n"
         "Телефон нужен для привязки клиента в платежной системе.",
-        reply_markup=keyboard
+        reply_markup=inline_kb,
     )
+    # отдельное сообщение с reply-кнопкой (нельзя добавить к edit_message)
+    phone_kb_msg = await message.answer(
+        "👇",
+        reply_markup=get_phone_request_keyboard(),
+    )
+    await state.update_data(phone_kb_msg_id=phone_kb_msg.message_id)
 
 
-@router.message(PaymentStates.waiting_for_phone)
-async def process_phone_for_payment(message: Message, state: FSMContext):
-    """обработка введённого телефона и создание ссылки на оплату"""
-    phone = _normalize_phone(message.text or "")
+async def _clear_phone_keyboard(message: Message, state: FSMContext):
+    """удаляем reply-кнопку шера и убираем reply keyboard через ReplyKeyboardRemove"""
+    from aiogram.types import ReplyKeyboardRemove as RKR
+    data = await state.get_data()
+    phone_kb_msg_id = data.get("phone_kb_msg_id")
+    # удаляем сообщение с reply-кнопкой
+    if phone_kb_msg_id:
+        try:
+            await message.bot.delete_message(chat_id=message.chat.id, message_id=phone_kb_msg_id)
+        except Exception:
+            pass
+    # убираем reply keyboard служебным сообщением (иначе не пропадёт)
+    try:
+        tmp = await message.answer(".", reply_markup=RKR())
+        await tmp.delete()
+    except Exception:
+        pass
+
+
+@router.message(PaymentStates.waiting_for_phone, F.contact)
+async def process_contact_for_payment(message: Message, state: FSMContext):
+    """обработка шера контакта из Telegram"""
+    await _clear_phone_keyboard(message, state)
+    await _safe_delete_user_message(message)
+
+    contact = message.contact
+    raw = contact.phone_number or ""
+    # нормализация: 79... → +79..., 89... → +79...
+    digits = raw.replace("+", "").replace(" ", "").replace("-", "")
+    if digits.startswith("8") and len(digits) == 11:
+        digits = "7" + digits[1:]
+    normalized = f"+{digits}" if digits else ""
+    phone = _normalize_phone(normalized)
+
     if not phone:
-        await _safe_delete_user_message(message)
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        inline_kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="subscription")]
         ])
         await _render_payment_menu(
             message,
             state,
-            "❌ Неверный формат телефона. Нужен строго формат +79991234567.\n\n"
-            "Пример: +79991234567",
-            reply_markup=keyboard
+            "❌ Не удалось распознать номер из контакта. Введите вручную в формате +79991234567:",
+            reply_markup=inline_kb,
         )
+        phone_kb_msg = await message.answer("👇", reply_markup=get_phone_request_keyboard())
+        await state.update_data(phone_kb_msg_id=phone_kb_msg.message_id)
         return
+
+    await _process_phone_and_pay(message, state, phone)
+
+
+@router.message(PaymentStates.waiting_for_phone)
+async def process_phone_for_payment(message: Message, state: FSMContext):
+    """обработка введённого вручную телефона"""
+    await _clear_phone_keyboard(message, state)
+    phone = _normalize_phone(message.text or "")
+    await _safe_delete_user_message(message)
+
+    if not phone:
+        inline_kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Отмена", callback_data="subscription")]
+        ])
+        await _render_payment_menu(
+            message,
+            state,
+            "❌ Неверный формат. Нужен строго формат +79991234567.\n\nИли нажмите кнопку 👇",
+            reply_markup=inline_kb,
+        )
+        phone_kb_msg = await message.answer("👇", reply_markup=get_phone_request_keyboard())
+        await state.update_data(phone_kb_msg_id=phone_kb_msg.message_id)
+        return
+
+    await _process_phone_and_pay(message, state, phone)
+
+
+async def _process_phone_and_pay(message: Message, state: FSMContext, phone: str):
+    """общая логика после получения валидного телефона"""
 
     data = await state.get_data()
     tariff_type = data.get("tariff_type")
@@ -365,7 +425,8 @@ async def callback_gift_back(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
     
-    await callback.message.edit_text(WELCOME_TEXT, reply_markup=get_main_menu())
+    has_sub = await db.get_user_subscription(callback.from_user.id) is not None
+    await callback.message.edit_text(WELCOME_TEXT, reply_markup=get_main_menu(has_sub))
 
 
 @router.callback_query(F.data.startswith("cancel_gift_"))
@@ -373,8 +434,9 @@ async def callback_cancel_gift(callback: CallbackQuery, state: FSMContext):
     """отмена ввода получателя подарка - возврат в главное меню"""
     await callback.answer()
     await state.clear()
-    
-    await callback.message.edit_text(WELCOME_TEXT, reply_markup=get_main_menu())
+
+    has_sub = await db.get_user_subscription(callback.from_user.id) is not None
+    await callback.message.edit_text(WELCOME_TEXT, reply_markup=get_main_menu(has_sub))
 
 
 @router.message(GiftSubscriptionStates.waiting_for_recipient)
@@ -566,7 +628,11 @@ async def cmd_cancel(message: Message, state: FSMContext):
     if current_state is None:
         await message.answer("❌ Нет активных операций для отмены.")
         return
-    
+
+    # если были в ожидании телефона — убираем reply keyboard
+    if current_state == PaymentStates.waiting_for_phone.state:
+        await _clear_phone_keyboard(message, state)
+
     await state.clear()
     await message.answer("✅ Операция отменена.")
 

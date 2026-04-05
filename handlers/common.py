@@ -1,6 +1,7 @@
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command, CommandStart
+from aiogram.fsm.context import FSMContext
 import os
 import aiosqlite
 from database.models import Database
@@ -24,12 +25,14 @@ router = Router()
 db = Database(DATABASE_PATH)
 
 # приветственный текст бота
-WELCOME_TEXT = """🧠 Эта рассылка — ваш личный проводник в мир глубинной психологии и реальных изменений.
-1 год — 52 письма.
-Каждое из которых — не готовая теория, а практический инструмент.
+WELCOME_TEXT = """Приветствую, друзья!
 
-✨ «Это ваш шанс наконец разобраться в себе — будь вы в активной зависимости, в ремиссии или просто хотите лучше понимать свою психику.
-Присоединяйтесь к сообществу людей, которые меняют свою жизнь через глубокое самопознание»"""
+Терапевтическая рассылка от меня — это ваш личный проводник в мир глубинной психологии и реальных изменений.
+Каждую неделю вы будете получать от меня послание на определенную тему.
+Это не просто теория, а практический инструмент!
+
+Мои письма - это ваш шанс наконец разобраться в себе, будь вы в активной зависимости, в ремиссии или просто хотите лучше понимать свою психику.
+Присоединяйтесь к сообществу людей, которые меняют свою жизнь через глубокое самопознание 🤝"""
 
 
 @router.message(CommandStart())
@@ -56,25 +59,30 @@ async def cmd_start(message: Message):
         
         if subscription:
             text = "✅ Оплата успешно обработана!\n\nДоступ к каналу активирован. Проверьте сообщения от бота со ссылкой для вступления."
+            has_sub = True
         else:
             text = "✅ Оплата получена!\n\nОбрабатываю платеж... Скоро придёт уведомление от бота."
-        
-        await message.answer(text, reply_markup=get_main_menu())
+            has_sub = False
+
+        await message.answer(text, reply_markup=get_main_menu(has_sub))
         return
     elif args == "payment_fail":
         logger.info(f"Редирект после неудачной оплаты для пользователя {user.id}")
         text = "❌ Оплата не прошла. Попробуйте еще раз или обратитесь в поддержку."
-        await message.answer(text, reply_markup=get_main_menu())
+        fail_sub = await db.get_user_subscription(user.id)
+        await message.answer(text, reply_markup=get_main_menu(fail_sub is not None))
         return
-    
+
+    has_sub = await db.get_user_subscription(user.id) is not None
     # отправляем текстовое сообщение с меню (это сообщение будет редактироваться)
-    await message.answer(WELCOME_TEXT, reply_markup=get_main_menu())
+    await message.answer(WELCOME_TEXT, reply_markup=get_main_menu(has_sub))
 
 
 @router.message(Command("menu"))
 async def cmd_menu(message: Message):
     """обработчик команды /menu - возврат в главное меню"""
-    await message.answer(WELCOME_TEXT, reply_markup=get_main_menu())
+    has_sub = await db.get_user_subscription(message.from_user.id) is not None
+    await message.answer(WELCOME_TEXT, reply_markup=get_main_menu(has_sub))
 
 
 @router.callback_query(F.data == "main_menu")
@@ -84,14 +92,15 @@ async def callback_main_menu(callback: CallbackQuery):
     logger = logging.getLogger(__name__)
     
     await callback.answer()
-    
+
+    has_sub = await db.get_user_subscription(callback.from_user.id) is not None
     try:
         # редактируем текущее сообщение
-        await callback.message.edit_text(WELCOME_TEXT, reply_markup=get_main_menu())
+        await callback.message.edit_text(WELCOME_TEXT, reply_markup=get_main_menu(has_sub))
     except Exception as e:
         logger.warning(f"Ошибка редактирования сообщения: {e}")
         # если не удалось отредактировать, отправляем новое
-        await callback.message.answer(WELCOME_TEXT, reply_markup=get_main_menu())
+        await callback.message.answer(WELCOME_TEXT, reply_markup=get_main_menu(has_sub))
 
 
 @router.message(Command("activate"))
@@ -196,8 +205,9 @@ async def handle_start_button(message: Message):
     
     user = message.from_user
     await db.add_user(user.id, user.username, user.first_name)
-    
-    await message.answer(WELCOME_TEXT, reply_markup=get_main_menu())
+
+    has_sub = await db.get_user_subscription(user.id) is not None
+    await message.answer(WELCOME_TEXT, reply_markup=get_main_menu(has_sub))
 
 
 @router.callback_query(F.data == "about_channel")
@@ -217,10 +227,20 @@ async def callback_requisites(callback: CallbackQuery):
 
 
 @router.callback_query(F.data == "subscription")
-async def callback_subscription(callback: CallbackQuery):
+async def callback_subscription(callback: CallbackQuery, state: FSMContext):
     """обработчик раздела 'Подписка'"""
     import logging
     logger = logging.getLogger(__name__)
+
+    # если пользователь нажал «Отмена» в шаге ввода телефона — убираем reply keyboard
+    try:
+        from handlers.payment import PaymentStates, _clear_phone_keyboard
+        cur = await state.get_state()
+        if cur == PaymentStates.waiting_for_phone.state:
+            await _clear_phone_keyboard(callback.message, state)
+    except Exception:
+        pass
+    await state.clear()
     
     await callback.answer()
     
