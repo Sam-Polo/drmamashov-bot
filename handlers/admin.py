@@ -1232,13 +1232,13 @@ async def callback_adduser_tariff(callback: CallbackQuery, state: FSMContext, bo
         # уведомляем пользователя о выданной подписке (если возможно)
         try:
             delay = NEWSLETTER_FIRST_SEND_DELAY_MINUTES
+            when_first = "сразу" if delay <= 0 else f"примерно через {delay} мин."
             if NEWSLETTER_ENABLED and NEWSLETTER_GOOGLE_DOC_ID:
                 user_notice = (
                     f"✅ Вам открыт доступ.\n\n"
                     f"Тариф: {tariff_info['name']}\n\n"
-                    f"📬 Запущена рассылка материалов по неделям: первое сообщение в этот чат "
-                    f"придёт примерно через {delay} мин., далее по расписанию.\n\n"
-                    f"Закрытый канал — по приглашению от бота (отдельным сообщением), если оно ещё не приходило."
+                    f"📬 Рассылка по неделям: первое письмо в этот чат — {when_first}, далее по расписанию.\n\n"
+                    f"Закрытый канал — по приглашению от бота (открытым сообщением), если ещё не приходило."
                 )
             else:
                 user_notice = (
