@@ -1,5 +1,5 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from config import TARIFFS, SUPPORT_TELEGRAM_USERNAME
+from config import TARIFFS, SUPPORT_TELEGRAM_USERNAME, _fmt
 
 
 def get_main_menu():
@@ -39,23 +39,43 @@ def get_subscription_menu(has_active_subscription: bool):
     return keyboard
 
 
+def get_tariffs_text() -> str:
+    """HTML-текст над кнопками тарифов: зачёркнутая полная цена + экономия"""
+    lines = ["<b>Выберите тариф:</b>\n"]
+    for key, t in TARIFFS.items():
+        orig = t.get("original_price")
+        savings = t.get("savings")
+        price_fmt = _fmt(t["price"])
+        name = t["name"]
+        if orig and savings:
+            orig_fmt = _fmt(orig)
+            save_fmt = _fmt(savings)
+            lines.append(
+                f"• <b>{_fmt(t['price'])} ₽</b> / {name} — "
+                f"<s>{orig_fmt} ₽</s>  экономия {save_fmt} ₽"
+            )
+        else:
+            lines.append(f"• <b>{price_fmt} ₽</b> / {name}")
+    return "\n".join(lines)
+
+
 def get_tariffs_menu():
-    """меню выбора тарифа"""
+    """кнопки выбора тарифа; текст для сообщения — get_tariffs_text()"""
     buttons = []
-    
-    # один тариф: monthly
-    if 'monthly' in TARIFFS:
+
+    for key, t in TARIFFS.items():
+        price_fmt = _fmt(t["price"])
+        name = t["name"]
         buttons.append([
             InlineKeyboardButton(
-                text=f"{TARIFFS['monthly']['name']} - {TARIFFS['monthly']['price']}₽",
-                callback_data="tariff_monthly"
+                text=f"{price_fmt} ₽ / {name}",
+                callback_data=f"tariff_{key}",
             )
         ])
-    
+
     buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="main_menu")])
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-    return keyboard
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def get_back_to_main():

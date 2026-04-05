@@ -28,9 +28,43 @@ CHANNEL_INVITE_LINK = os.getenv("CHANNEL_INVITE_LINK", "")
 # в Docker используем /app/data/bot.db, локально - bot.db
 DATABASE_PATH = os.getenv("DATABASE_PATH", "bot.db")
 
+# базовая цена 1 месяца для расчёта экономии
+_MONTHLY_PRICE = 990
+
+def _fmt(n: int) -> str:
+    """форматирует число с пробелом как разделителем тысяч: 1990 → '1 990'"""
+    return f"{n:,}".replace(",", "\u00a0")  # неразрывный пробел для читаемости
+
 # тарифы (в рублях)
 TARIFFS = {
-    "monthly": {"price": 990, "duration_days": 30, "name": "1 месяц"},
+    "monthly": {
+        "price": _MONTHLY_PRICE,
+        "duration_days": 30,
+        "name": "1 месяц",
+        "original_price": None,   # нет зачёркнутой цены
+        "savings": None,
+    },
+    "quarterly": {
+        "price": 1990,
+        "duration_days": 90,
+        "name": "3 месяца",
+        "original_price": _MONTHLY_PRICE * 3,   # 2 970
+        "savings": _MONTHLY_PRICE * 3 - 1990,   # 980
+    },
+    "half_year": {
+        "price": 3990,
+        "duration_days": 180,
+        "name": "6 месяцев",
+        "original_price": _MONTHLY_PRICE * 6,   # 5 940
+        "savings": _MONTHLY_PRICE * 6 - 3990,   # 1 950
+    },
+    "annual": {
+        "price": 4990,
+        "duration_days": 365,
+        "name": "12 месяцев",
+        "original_price": _MONTHLY_PRICE * 12,  # 11 880
+        "savings": _MONTHLY_PRICE * 12 - 4990,  # 6 890
+    },
 }
 
 # функции, временно отключенные
@@ -46,6 +80,9 @@ PRODAMUS_PAYFORM_URL = os.getenv("PRODAMUS_PAYFORM_URL", "https://nugaeva.payfor
 
 # Product ID для каждого тарифа (получить после создания подписок в ЛК Prodamus)
 PRODAMUS_PRODUCT_ID_MONTHLY = os.getenv("PRODAMUS_PRODUCT_ID_MONTHLY", "")
+PRODAMUS_PRODUCT_ID_QUARTERLY = os.getenv("PRODAMUS_PRODUCT_ID_QUARTERLY", "")
+PRODAMUS_PRODUCT_ID_HALF_YEAR = os.getenv("PRODAMUS_PRODUCT_ID_HALF_YEAR", "")
+PRODAMUS_PRODUCT_ID_ANNUAL = os.getenv("PRODAMUS_PRODUCT_ID_ANNUAL", "")
 PRODAMUS_PRODUCT_ID_LIFETIME = os.getenv("PRODAMUS_PRODUCT_ID_LIFETIME", "")
 
 # версия для логов (на сервере можно задать тег/хеш деплоя)

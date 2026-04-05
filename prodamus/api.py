@@ -88,17 +88,26 @@ class ProdamusAPI:
         # определяем product_id на основе тарифа
         # для monthly и half_year - это ID подписок в Prodamus
         # для lifetime - это ID разового товара/услуги в Prodamus
-        from config import PRODAMUS_PRODUCT_ID_MONTHLY, PRODAMUS_PRODUCT_ID_LIFETIME
-        
+        from config import (
+            PRODAMUS_PRODUCT_ID_MONTHLY,
+            PRODAMUS_PRODUCT_ID_QUARTERLY,
+            PRODAMUS_PRODUCT_ID_HALF_YEAR,
+            PRODAMUS_PRODUCT_ID_ANNUAL,
+            PRODAMUS_PRODUCT_ID_LIFETIME,
+        )
+
         # если передан product_id_override, используем его
         if product_id_override:
             product_id = product_id_override
         else:
             product_ids = {
                 "monthly": PRODAMUS_PRODUCT_ID_MONTHLY,
+                "quarterly": PRODAMUS_PRODUCT_ID_QUARTERLY,
+                "half_year": PRODAMUS_PRODUCT_ID_HALF_YEAR,
+                "annual": PRODAMUS_PRODUCT_ID_ANNUAL,
                 "lifetime": PRODAMUS_PRODUCT_ID_LIFETIME,
             }
-            
+
             product_id = product_ids.get(tariff_type)
             if not product_id:
                 return None

@@ -1086,4 +1086,3 @@ class Database:
             async with db.execute(query) as cursor:
                 rows = await cursor.fetchall()
                 return [row[0] for row in rows]
-

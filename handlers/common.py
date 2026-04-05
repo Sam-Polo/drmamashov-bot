@@ -9,6 +9,7 @@ from keyboards.inline import (
     get_about_channel_menu,
     get_subscription_menu,
     get_tariffs_menu,
+    get_tariffs_text,
     get_back_to_main,
 )
 from keyboards.reply import get_start_keyboard
@@ -282,7 +283,6 @@ async def callback_subscription(callback: CallbackQuery):
         text += await get_subscription_newsletter_footer(db, user_id)
 
     if not has_subscription:
-        text = "Выбрать тариф:"
-        await callback.message.edit_text(text, reply_markup=get_tariffs_menu())
+        await callback.message.edit_text(get_tariffs_text(), reply_markup=get_tariffs_menu())
     else:
         await callback.message.edit_text(text, reply_markup=get_subscription_menu(has_subscription))

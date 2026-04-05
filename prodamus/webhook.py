@@ -96,14 +96,19 @@ class ProdamusWebhookHandler:
         """обработка успешной оплаты"""
         order_num = data.get("order_num", "")
         
-        # определяем тип тарифа из order_num
+        # определяем тип тарифа из order_num; порядок важен: half_year до monthly (содержит подстроку)
         tariff_type = None
-        if "monthly" in order_num:
-            tariff_type = "monthly"
-        elif "half_year" in order_num:
-            tariff_type = "half_year"
-        elif "lifetime" in order_num:
-            tariff_type = "lifetime"
+        _ORDER_TARIFF_MAP = [
+            ("quarterly", "quarterly"),
+            ("half_year", "half_year"),
+            ("annual", "annual"),
+            ("lifetime", "lifetime"),
+            ("monthly", "monthly"),
+        ]
+        for fragment, ttype in _ORDER_TARIFF_MAP:
+            if fragment in order_num:
+                tariff_type = ttype
+                break
         
         if not tariff_type:
             logger.error(f"Не удалось определить тип тарифа из order_num: {order_num}")
