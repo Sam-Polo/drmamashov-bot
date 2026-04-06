@@ -6,6 +6,9 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
+# приветственное фото для /start (лежит в media/, в Docker монтируется том ./media)
+WELCOME_PHOTO_PATH = BASE_DIR / "media" / "photo_2026-02-13_11-31-01.jpg"
+
 # токен бота
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BOT_USERNAME = os.getenv("BOT_USERNAME", "")  # username бота (без @)

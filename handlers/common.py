@@ -1,5 +1,5 @@
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, FSInputFile
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 import os
@@ -19,7 +19,7 @@ from utils.texts import (
     get_requisites_text,
     get_subscription_status_text,
 )
-from config import DATABASE_PATH, CHANNEL_ID
+from config import DATABASE_PATH, CHANNEL_ID, WELCOME_PHOTO_PATH
 
 router = Router()
 db = Database(DATABASE_PATH)
@@ -33,6 +33,21 @@ WELCOME_TEXT = """Приветствую, друзья!
 
 Мои письма - это ваш шанс наконец разобраться в себе, будь вы в активной зависимости, в ремиссии или просто хотите лучше понимать свою психику.
 Присоединяйтесь к сообществу людей, которые меняют свою жизнь через глубокое самопознание 🤝"""
+
+
+async def _send_welcome_photo_then_text(message: Message, has_sub: bool) -> None:
+    """сначала фото приветствия, затем текст с главным меню"""
+    import logging
+
+    logger = logging.getLogger(__name__)
+    try:
+        if WELCOME_PHOTO_PATH.is_file():
+            await message.answer_photo(FSInputFile(WELCOME_PHOTO_PATH))
+        else:
+            logger.warning("фото приветствия не найдено: %s", WELCOME_PHOTO_PATH)
+    except Exception as e:
+        logger.error("ошибка отправки фото приветствия: %s", e, exc_info=True)
+    await message.answer(WELCOME_TEXT, reply_markup=get_main_menu(has_sub))
 
 
 @router.message(CommandStart())
@@ -74,8 +89,7 @@ async def cmd_start(message: Message):
         return
 
     has_sub = await db.get_user_subscription(user.id) is not None
-    # отправляем текстовое сообщение с меню (это сообщение будет редактироваться)
-    await message.answer(WELCOME_TEXT, reply_markup=get_main_menu(has_sub))
+    await _send_welcome_photo_then_text(message, has_sub)
 
 
 @router.message(Command("menu"))
@@ -207,7 +221,7 @@ async def handle_start_button(message: Message):
     await db.add_user(user.id, user.username, user.first_name)
 
     has_sub = await db.get_user_subscription(user.id) is not None
-    await message.answer(WELCOME_TEXT, reply_markup=get_main_menu(has_sub))
+    await _send_welcome_photo_then_text(message, has_sub)
 
 
 @router.callback_query(F.data == "about_channel")
