@@ -43,19 +43,16 @@ def get_subscription_menu(has_active_subscription: bool):
 
 
 def get_tariffs_text() -> str:
-    """HTML-текст над кнопками тарифов: зачёркнутая полная цена + экономия"""
+    """HTML-текст над кнопками тарифов: зачёркнутая полная цена (без дублирования экономии)"""
     lines = ["<b>Выберите тариф:</b>\n"]
     for key, t in TARIFFS.items():
         orig = t.get("original_price")
-        savings = t.get("savings")
         price_fmt = _fmt(t["price"])
         name = t["name"]
-        if orig and savings:
+        if orig:
             orig_fmt = _fmt(orig)
-            save_fmt = _fmt(savings)
             lines.append(
-                f"• <b>{_fmt(t['price'])} ₽</b> / {name} — "
-                f"<s>{orig_fmt} ₽</s>  экономия {save_fmt} ₽"
+                f"• <b>{price_fmt} ₽</b> / {name} — <s>{orig_fmt} ₽</s>"
             )
         else:
             lines.append(f"• <b>{price_fmt} ₽</b> / {name}")
@@ -69,9 +66,15 @@ def get_tariffs_menu():
     for key, t in TARIFFS.items():
         price_fmt = _fmt(t["price"])
         name = t["name"]
+        savings = t.get("savings")
+        if savings:
+            save_fmt = _fmt(savings)
+            btn_text = f"{price_fmt} ₽ / {name} — экономия {save_fmt} ₽"
+        else:
+            btn_text = f"{price_fmt} ₽ / {name}"
         buttons.append([
             InlineKeyboardButton(
-                text=f"{price_fmt} ₽ / {name}",
+                text=btn_text,
                 callback_data=f"tariff_{key}",
             )
         ])
