@@ -381,6 +381,40 @@ class Database:
             ))
             await db.commit()
 
+        await self.newsletter_sync_after_new_subscription(user_id)
+
+    async def newsletter_sync_after_new_subscription(self, user_id: int):
+        """после новой активной подписки: если уже был прогресс (следующая неделя больше 1) — не откатываем на неделю 1, иначе как новый подписчик."""
+        progress = await self.newsletter_get_progress(user_id)
+        next_w = int(progress.get("next_week") or 1) if progress else 1
+
+        if progress and next_w > 1:
+            from datetime import timedelta
+            from zoneinfo import ZoneInfo
+            from config import NEWSLETTER_WEEK_SPACING_DAYS, NEWSLETTER_FIRST_SEND_DELAY_MINUTES
+
+            msk = ZoneInfo("Europe/Moscow")
+            now_msk = datetime.now(msk)
+            first_delay = timedelta(minutes=NEWSLETTER_FIRST_SEND_DELAY_MINUTES)
+            # due = anchor + spacing*(next_w-1); ставим anchor так, чтобы due ≈ now+first_delay (следующее письмо в очереди)
+            anchor = now_msk + first_delay - timedelta(
+                days=NEWSLETTER_WEEK_SPACING_DAYS * (next_w - 1)
+            )
+            anchor_iso = anchor.isoformat()
+
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute("""
+                    INSERT INTO newsletter_progress (user_id, next_week, last_sent_iso_week, anchor_at)
+                    VALUES (?, ?, NULL, ?)
+                    ON CONFLICT(user_id) DO UPDATE SET
+                        next_week = excluded.next_week,
+                        last_sent_iso_week = NULL,
+                        anchor_at = excluded.anchor_at,
+                        updated_at = CURRENT_TIMESTAMP
+                """, (user_id, next_w, anchor_iso))
+                await db.commit()
+            return
+
         await self.newsletter_reset_anchor_for_new_subscription(user_id)
     
     async def create_migration_subscription(
@@ -1069,20 +1103,16 @@ class Database:
             await db.commit()
 
     async def newsletter_get_recipient_user_ids(self) -> list[int]:
-        """user_id с активной подпиской для рассылки"""
-        from config import NEWSLETTER_INCLUDE_TRIAL
+        """user_id с активной подпиской для рассылки (все платные тарифы из TARIFFS + lifetime, см. config)"""
+        from config import newsletter_recipient_tariff_types
 
+        types = newsletter_recipient_tariff_types()
+        placeholders = ",".join("?" * len(types))
+        query = f"""
+            SELECT DISTINCT user_id FROM subscriptions
+            WHERE is_active = 1 AND tariff_type IN ({placeholders})
+        """
         async with aiosqlite.connect(self.db_path) as db:
-            if NEWSLETTER_INCLUDE_TRIAL:
-                query = """
-                    SELECT DISTINCT user_id FROM subscriptions
-                    WHERE is_active = 1 AND tariff_type IN ('monthly', 'lifetime', 'trial')
-                """
-            else:
-                query = """
-                    SELECT DISTINCT user_id FROM subscriptions
-                    WHERE is_active = 1 AND tariff_type IN ('monthly', 'lifetime')
-                """
-            async with db.execute(query) as cursor:
+            async with db.execute(query, types) as cursor:
                 rows = await cursor.fetchall()
                 return [row[0] for row in rows]

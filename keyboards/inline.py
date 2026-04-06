@@ -1,6 +1,22 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import TARIFFS, SUPPORT_TELEGRAM_USERNAME, _fmt
 
+# короткий период в тексте кнопки (лимит Telegram ~64 символа)
+_TARIFF_BTN_PERIOD = {
+    "monthly": "1 мес",
+    "quarterly": "3 мес",
+    "half_year": "6 мес",
+    "annual": "12 мес",
+}
+
+
+def _tariff_btn_discount_percent(t: dict) -> int | None:
+    orig = t.get("original_price")
+    price = t.get("price", 0)
+    if not orig or orig <= price:
+        return None
+    return int(round((orig - price) / orig * 100))
+
 
 def get_main_menu(has_active_subscription: bool = False):
     """главное меню с разделами; отписка — только при активной подписке"""
@@ -65,13 +81,12 @@ def get_tariffs_menu():
 
     for key, t in TARIFFS.items():
         price_fmt = _fmt(t["price"])
-        name = t["name"]
-        savings = t.get("savings")
-        if savings:
-            save_fmt = _fmt(savings)
-            btn_text = f"{price_fmt} ₽ / {name} — экономия {save_fmt} ₽"
+        period = _TARIFF_BTN_PERIOD.get(key, t["name"])
+        pct = _tariff_btn_discount_percent(t)
+        if pct is not None and pct > 0:
+            btn_text = f"{price_fmt} ₽ / {period} (-{pct}%)"
         else:
-            btn_text = f"{price_fmt} ₽ / {name}"
+            btn_text = f"{price_fmt} ₽ / {period}"
         buttons.append([
             InlineKeyboardButton(
                 text=btn_text,
