@@ -44,14 +44,27 @@ def _parse_anchor_iso(iso: str | None) -> datetime | None:
 
 
 def _split_telegram_chunks(text: str, limit: int = 4000) -> list[str]:
+    """Разбивает текст на части по границам абзацев, не превышая limit символов"""
     text = text.strip()
+    if not text:
+        return []
     if len(text) <= limit:
-        return [text] if text else []
+        return [text]
+    paragraphs = text.split("\n\n")
     chunks: list[str] = []
-    rest = text
-    while rest:
-        chunks.append(rest[:limit])
-        rest = rest[limit:].lstrip()
+    current_parts: list[str] = []
+    current_len = 0
+    for para in paragraphs:
+        addition = (2 if current_parts else 0) + len(para)
+        if current_parts and current_len + addition > limit:
+            chunks.append("\n\n".join(current_parts))
+            current_parts = [para]
+            current_len = len(para)
+        else:
+            current_parts.append(para)
+            current_len += addition
+    if current_parts:
+        chunks.append("\n\n".join(current_parts))
     return chunks
 
 
@@ -125,8 +138,8 @@ async def run_newsletter_tick(bot: Bot, db: Database, doc_id: str) -> None:
                     if not progress:
                         break
                     next_w = int(progress.get("next_week") or 1)
-                    body = weeks_content.get(next_w)
-                    if not body:
+                    week_data = weeks_content.get(next_w)
+                    if not week_data:
                         logger.warning(
                             "newsletter: user_id=%s ждёт неделю %s, в документе нет (есть недели %s) — стоп",
                             user_id,
@@ -140,9 +153,21 @@ async def run_newsletter_tick(bot: Bot, db: Database, doc_id: str) -> None:
                     if now_msk < due:
                         break
 
-                    safe = html.escape(body)
+                    body = week_data["text"]
+                    banner_url = week_data.get("banner_url")
                     header = html.escape(f"Неделя {next_w}")
-                    full_text = f"📬 <b>{header}</b>\n\n{safe}"
+                    full_text = f"📬 <b>{header}</b>\n\n{body}"
+
+                    if banner_url:
+                        try:
+                            await bot.send_photo(chat_id=user_id, photo=banner_url)
+                        except Exception as banner_err:
+                            logger.warning(
+                                "newsletter: не удалось отправить баннер user_id=%s неделя=%s: %s",
+                                user_id,
+                                next_w,
+                                banner_err,
+                            )
 
                     for part in _split_telegram_chunks(full_text):
                         await bot.send_message(

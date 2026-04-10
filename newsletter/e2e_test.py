@@ -76,18 +76,25 @@ async def run_newsletter_e2e_test(
                 f"остановлено после отправки {sent} писем: подписка снята (проверка как в проде).{warn}"
             )
 
-        body = weeks.get(wk, "").strip()
-        if not body:
+        week_data = weeks.get(wk, {})
+        body = week_data.get("text", "").strip()
+        banner_url = week_data.get("banner_url")
+        if not body and not banner_url:
             continue
 
-        safe = html.escape(body)
         header = html.escape(f"Неделя {wk}")
         full_text = (
             f"🧪 <b>ТЕСТ рассылки</b> (не рабочая очередь)\n"
-            f"📬 <b>{header}</b>\n\n{safe}"
+            f"📬 <b>{header}</b>\n\n{body}"
         )
 
         try:
+            if banner_url:
+                try:
+                    await bot.send_photo(chat_id=target_user_id, photo=banner_url)
+                except Exception as banner_err:
+                    logger.warning("newsletter e2e: баннер неделя %s: %s", wk, banner_err)
+
             for part in _split_telegram_chunks(full_text):
                 await bot.send_message(
                     chat_id=target_user_id,
