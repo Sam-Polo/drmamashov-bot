@@ -46,17 +46,29 @@ def _parse_anchor_iso(iso: str | None) -> datetime | None:
 
 
 async def _fetch_banner(url: str) -> BufferedInputFile | None:
-    """Скачивает баннер по URL и возвращает BufferedInputFile для отправки в Telegram"""
+    """Возвращает BufferedInputFile для отправки в Telegram.
+    Поддерживает base64 data URI (Google Docs HTML export встраивает картинки так)
+    и обычные HTTP-URL."""
     try:
+        if url.startswith("data:"):
+            # data:image/png;base64,XXXX...
+            import base64 as _b64
+            header, _, b64data = url.partition(",")
+            if "base64" not in header or not b64data:
+                return None
+            data = _b64.b64decode(b64data)
+            mime = header.split(";")[0].split(":")[-1] if ":" in header else "image/jpeg"
+            ext = mime.split("/")[-1] or "jpg"
+            return BufferedInputFile(data, filename=f"banner.{ext}")
+
         timeout = aiohttp.ClientTimeout(total=30, connect=10)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url, allow_redirects=True) as resp:
                 if resp.status == 200:
-                    data = await resp.read()
-                    return BufferedInputFile(data, filename="banner.jpg")
-                logger.warning("banner fetch: статус %s для %s", resp.status, url[:80])
+                    return BufferedInputFile(await resp.read(), filename="banner.jpg")
+                logger.warning("banner fetch: статус %s", resp.status)
     except Exception as e:
-        logger.warning("banner fetch: %s", e)
+        logger.warning("banner fetch error: %s", str(e)[:120])
     return None
 
 
