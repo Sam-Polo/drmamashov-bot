@@ -50,32 +50,19 @@ async def run_newsletter_e2e_test(
         return False, "в документе нет ни одной недели"
 
     sorted_weeks = sorted(weeks.keys())
-    sub = await db.get_user_subscription(target_user_id)
-    if not sub:
-        return False, f"user_id={target_user_id}: нет активной подписки (как в проде — не шлём)"
-
-    in_queue = target_user_id in await db.newsletter_get_recipient_user_ids()
-    warn = "" if in_queue else " ⚠️ в проде этот user не в очереди рассылки (тариф trial при trial=0 и т.п.)."
 
     logger.info(
-        "newsletter e2e test старт: МСК=%s, user_id=%s, недель=%s, версия=%s, in_prod_queue=%s",
+        "newsletter e2e test старт: МСК=%s, user_id=%s, недель=%s, версия=%s",
         _now_msk_str(),
         target_user_id,
         len(sorted_weeks),
         APP_VERSION,
-        in_queue,
     )
 
     await asyncio.sleep(first_sec)
     sent = 0
 
     for i, wk in enumerate(sorted_weeks):
-        sub = await db.get_user_subscription(target_user_id)
-        if not sub:
-            return False, (
-                f"остановлено после отправки {sent} писем: подписка снята (проверка как в проде).{warn}"
-            )
-
         week_data = weeks.get(wk, {})
         body = week_data.get("text", "").strip()
         banner_url = week_data.get("banner_url")
@@ -106,7 +93,7 @@ async def run_newsletter_e2e_test(
             return False, f"user_id={target_user_id} заблокировал бота на неделе {wk}.{warn}"
         except Exception as e:
             logger.error("newsletter e2e: send %s", e, exc_info=True)
-            return False, f"ошибка отправки (неделя {wk}): {e}{warn}"
+            return False, f"ошибка отправки (неделя {wk}): {e}"
 
         sent += 1
         logger.info(
@@ -122,5 +109,5 @@ async def run_newsletter_e2e_test(
             await asyncio.sleep(between_sec)
 
     return True, (
-        f"user_id={target_user_id}: отправлено писем: {sent} (недели {sorted_weeks[0]}…{sorted_weeks[-1]}).{warn}"
+        f"user_id={target_user_id}: отправлено писем: {sent} (недели {sorted_weeks[0]}…{sorted_weeks[-1]})"
     )

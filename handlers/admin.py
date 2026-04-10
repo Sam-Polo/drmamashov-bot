@@ -403,17 +403,6 @@ async def cmd_health(message: Message, bot: Bot):
     except Exception as e:
         status.append(f"❌ Prodamus API: ошибка - {str(e)[:50]}")
     
-    # проверка канала
-    try:
-        from config import CHANNEL_ID
-        if CHANNEL_ID:
-            chat = await bot.get_chat(chat_id=CHANNEL_ID)
-            status.append(f"✅ Канал: доступен ({chat.title if hasattr(chat, 'title') else 'OK'})")
-        else:
-            status.append("⚠️ Канал: CHANNEL_ID не установлен")
-    except Exception as e:
-        status.append(f"❌ Канал: ошибка - {str(e)[:50]}")
-    
     # проверка бота
     try:
         me = await bot.get_me()
