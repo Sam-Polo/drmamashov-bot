@@ -16,7 +16,7 @@ from config import (
 )
 from database.models import Database
 from newsletter.google_doc import load_weeks
-from newsletter.weekly_job import _split_telegram_chunks
+from newsletter.weekly_job import _fetch_banner, _split_telegram_chunks
 
 logger = logging.getLogger(__name__)
 _MSK = ZoneInfo("Europe/Moscow")
@@ -77,10 +77,12 @@ async def run_newsletter_e2e_test(
 
         try:
             if banner_url:
-                try:
-                    await bot.send_photo(chat_id=target_user_id, photo=banner_url)
-                except Exception as banner_err:
-                    logger.warning("newsletter e2e: баннер неделя %s: %s", wk, banner_err)
+                photo = await _fetch_banner(banner_url)
+                if photo:
+                    try:
+                        await bot.send_photo(chat_id=target_user_id, photo=photo)
+                    except Exception as banner_err:
+                        logger.warning("newsletter e2e: баннер неделя %s: %s", wk, banner_err)
 
             for part in _split_telegram_chunks(full_text):
                 await bot.send_message(

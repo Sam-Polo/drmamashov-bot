@@ -6,8 +6,10 @@ import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+import aiohttp
 from aiogram import Bot
 from aiogram.enums import ParseMode
+from aiogram.types import BufferedInputFile
 
 from config import APP_VERSION, NEWSLETTER_WEEK_SPACING_DAYS
 from database.models import Database
@@ -41,6 +43,21 @@ def _parse_anchor_iso(iso: str | None) -> datetime | None:
         return dt
     except ValueError:
         return None
+
+
+async def _fetch_banner(url: str) -> BufferedInputFile | None:
+    """Скачивает баннер по URL и возвращает BufferedInputFile для отправки в Telegram"""
+    try:
+        timeout = aiohttp.ClientTimeout(total=30, connect=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(url, allow_redirects=True) as resp:
+                if resp.status == 200:
+                    data = await resp.read()
+                    return BufferedInputFile(data, filename="banner.jpg")
+                logger.warning("banner fetch: статус %s для %s", resp.status, url[:80])
+    except Exception as e:
+        logger.warning("banner fetch: %s", e)
+    return None
 
 
 def _split_telegram_chunks(text: str, limit: int = 4000) -> list[str]:
@@ -159,15 +176,17 @@ async def run_newsletter_tick(bot: Bot, db: Database, doc_id: str) -> None:
                     full_text = f"📬 <b>{header}</b>\n\n{body}"
 
                     if banner_url:
-                        try:
-                            await bot.send_photo(chat_id=user_id, photo=banner_url)
-                        except Exception as banner_err:
-                            logger.warning(
-                                "newsletter: не удалось отправить баннер user_id=%s неделя=%s: %s",
-                                user_id,
-                                next_w,
-                                banner_err,
-                            )
+                        photo = await _fetch_banner(banner_url)
+                        if photo:
+                            try:
+                                await bot.send_photo(chat_id=user_id, photo=photo)
+                            except Exception as banner_err:
+                                logger.warning(
+                                    "newsletter: не удалось отправить баннер user_id=%s неделя=%s: %s",
+                                    user_id,
+                                    next_w,
+                                    banner_err,
+                                )
 
                     for part in _split_telegram_chunks(full_text):
                         await bot.send_message(
