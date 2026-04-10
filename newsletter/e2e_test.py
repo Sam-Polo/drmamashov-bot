@@ -69,11 +69,7 @@ async def run_newsletter_e2e_test(
         if not body and not banner_url:
             continue
 
-        header = html.escape(f"Неделя {wk}")
-        full_text = (
-            f"🧪 <b>ТЕСТ рассылки</b> (не рабочая очередь)\n"
-            f"📬 <b>{header}</b>\n\n{body}"
-        )
+        full_text = f"🧪 <b>ТЕСТ рассылки — неделя {wk}</b> (не рабочая очередь)\n\n{body}"
 
         try:
             if banner_url:

@@ -1,6 +1,5 @@
 """периодическая рассылка «недель» из Google Doc (якорь от момента подписки + задержка)"""
 import asyncio
-import html
 import logging
 import time
 from datetime import datetime, timedelta
@@ -184,8 +183,7 @@ async def run_newsletter_tick(bot: Bot, db: Database, doc_id: str) -> None:
 
                     body = week_data["text"]
                     banner_url = week_data.get("banner_url")
-                    header = html.escape(f"Неделя {next_w}")
-                    full_text = f"📬 <b>{header}</b>\n\n{body}"
+                    full_text = body
 
                     if banner_url:
                         photo = await _fetch_banner(banner_url)
