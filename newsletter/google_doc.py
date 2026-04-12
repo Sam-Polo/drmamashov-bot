@@ -238,6 +238,7 @@ class _DocParser(HTMLParser):
         self._in_para = False
 
         # убираем HTML-теги и спецсимволы (&nbsp; и т.п.) чтобы проверить реальную пустоту
+        plain = _strip_invisible(re.sub(r"<[^>]+>", "", para_html).replace("\xa0", "").replace("&nbsp;", ""))
         if not plain:
             return
 
