@@ -43,13 +43,21 @@ def _parse_style(style: str) -> frozenset:
     return frozenset(fmts)
 
 
-def _parse_css_classes(css: str) -> Dict[str, frozenset]:
-    """Разбирает <style>-блок: возвращает {имя_класса: набор_форматов}"""
-    result: Dict[str, frozenset] = {}
+def _parse_margin_bottom_pt(style: str) -> float:
+    """Возвращает margin-bottom в pt из строки CSS (0.0 если не задан или 0)"""
+    m = re.search(r"margin-bottom\s*:\s*([\d.]+)\s*pt", style)
+    return float(m.group(1)) if m else 0.0
+
+
+def _parse_css_classes(css: str) -> Dict[str, dict]:
+    """Разбирает <style>-блок: возвращает {имя_класса: {fmts, margin_bottom_pt}}"""
+    result: Dict[str, dict] = {}
     for m in re.finditer(r"\.([\w-]+)\s*\{([^}]*)\}", css, re.DOTALL):
-        fmts = _parse_style(m.group(2))
-        if fmts:
-            result[m.group(1)] = fmts
+        body = m.group(2)
+        fmts = _parse_style(body)
+        mb = _parse_margin_bottom_pt(body)
+        if fmts or mb:
+            result[m.group(1)] = {"fmts": fmts, "margin_bottom_pt": mb}
     return result
 
 
@@ -69,12 +77,14 @@ class _DocParser(HTMLParser):
         self.weeks: Dict[int, dict] = {}
 
         self._current_week: Optional[int] = None
-        self._paragraphs: list[str] = []
+        # (para_html, separator) где separator — строка перед следующим абзацем ("\n" или "\n\n")
+        self._paragraphs: list[tuple[str, str]] = []
         self._current_banner: Optional[str] = None
 
         # Текущий абзац
         self._para_parts: list[str] = []
         self._in_para: bool = False
+        self._para_class: str = ""  # класс текущего <p>
         # Стек форматирования: (tag, added_fmts)
         self._fmt_stack: list[tuple] = []
         self._active_fmt: set = set()
@@ -94,8 +104,14 @@ class _DocParser(HTMLParser):
     def _get_class_fmts(self, class_attr: str) -> frozenset:
         fmts: set = set()
         for cls in class_attr.split():
-            fmts |= self._css_classes.get(cls, frozenset())
+            fmts |= self._css_classes.get(cls, {}).get("fmts", frozenset())
         return frozenset(fmts)
+
+    def _get_class_margin_bottom(self, class_attr: str) -> float:
+        total = 0.0
+        for cls in class_attr.split():
+            total += self._css_classes.get(cls, {}).get("margin_bottom_pt", 0.0)
+        return total
 
     # ── Форматирование ────────────────────────────────────────────────────
 
@@ -148,6 +164,7 @@ class _DocParser(HTMLParser):
             self._fmt_stack = []
             self._active_fmt = set()
             self._link_stack = []
+            self._para_class = attrs_dict.get("class", "")
             return
 
         if tag == "img":
@@ -242,6 +259,10 @@ class _DocParser(HTMLParser):
         if not plain:
             return
 
+        # margin-bottom > 0 означает пустую строку после абзаца (как в документе)
+        mb = self._get_class_margin_bottom(self._para_class)
+        separator = "\n\n" if mb > 0 else "\n"
+
         m = _WEEK_LINE.match(plain)
         if m:
             self._flush_current_week()
@@ -249,12 +270,18 @@ class _DocParser(HTMLParser):
             self._paragraphs = []
             self._current_banner = None
         elif self._current_week is not None:
-            self._paragraphs.append(para_html)
+            self._paragraphs.append((para_html, separator))
 
     def _flush_current_week(self) -> None:
         if self._current_week is None:
             return
-        body = "\n\n".join(self._paragraphs).strip()
+        # соединяем абзацы: сепаратор берём от предыдущего абзаца
+        parts: list[str] = []
+        for i, (para_html, sep) in enumerate(self._paragraphs):
+            parts.append(para_html)
+            if i < len(self._paragraphs) - 1:
+                parts.append(sep)
+        body = "".join(parts).strip()
         if body or self._current_banner:
             self.weeks[self._current_week] = {
                 "text": body,
