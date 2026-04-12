@@ -72,28 +72,51 @@ async def _fetch_banner(url: str) -> BufferedInputFile | None:
 
 
 def _split_telegram_chunks(text: str, limit: int = 4000) -> list[str]:
-    """Разбивает текст на части по границам абзацев, не превышая limit символов"""
+    """Разбивает текст на части не длиннее limit символов.
+    Режет по границам абзацев (\n\n), затем по строкам (\n), затем по символам."""
     text = text.strip()
     if not text:
         return []
     if len(text) <= limit:
         return [text]
-    paragraphs = text.split("\n\n")
-    chunks: list[str] = []
-    current_parts: list[str] = []
-    current_len = 0
-    for para in paragraphs:
-        addition = (2 if current_parts else 0) + len(para)
-        if current_parts and current_len + addition > limit:
-            chunks.append("\n\n".join(current_parts))
-            current_parts = [para]
-            current_len = len(para)
+
+    def _split_by(text: str, sep: str) -> list[str]:
+        """Разбивает text на чанки по sep, каждый ≤ limit."""
+        segments = text.split(sep)
+        chunks: list[str] = []
+        current_parts: list[str] = []
+        current_len = 0
+        for seg in segments:
+            addition = (len(sep) if current_parts else 0) + len(seg)
+            if current_parts and current_len + addition > limit:
+                chunks.append(sep.join(current_parts))
+                current_parts = [seg]
+                current_len = len(seg)
+            else:
+                current_parts.append(seg)
+                current_len += addition
+        if current_parts:
+            chunks.append(sep.join(current_parts))
+        return chunks
+
+    # 1. Режем по двойным переносам
+    rough = _split_by(text, "\n\n")
+    # 2. Если какой-то чанк всё ещё длиннее — режем по одиночным переносам
+    medium: list[str] = []
+    for chunk in rough:
+        if len(chunk) > limit:
+            medium.extend(_split_by(chunk, "\n"))
         else:
-            current_parts.append(para)
-            current_len += addition
-    if current_parts:
-        chunks.append("\n\n".join(current_parts))
-    return chunks
+            medium.append(chunk)
+    # 3. Если и это не помогло — режем по символам
+    result: list[str] = []
+    for chunk in medium:
+        if len(chunk) > limit:
+            for i in range(0, len(chunk), limit):
+                result.append(chunk[i:i + limit])
+        else:
+            result.append(chunk)
+    return result
 
 
 async def _get_weeks_cached(doc_id: str) -> dict:

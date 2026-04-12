@@ -257,11 +257,11 @@ class _DocParser(HTMLParser):
         # убираем HTML-теги и спецсимволы (&nbsp; и т.п.) чтобы проверить реальную пустоту
         plain = _strip_invisible(re.sub(r"<[^>]+>", "", para_html).replace("\xa0", "").replace("&nbsp;", ""))
         if not plain:
+            # пустой абзац = пустая строка в документе — помечаем предыдущий абзац разделителем "\n\n"
+            if self._current_week is not None and self._paragraphs:
+                last_html, _ = self._paragraphs[-1]
+                self._paragraphs[-1] = (last_html, "\n\n")
             return
-
-        # margin-bottom > 0 означает пустую строку после абзаца (как в документе)
-        mb = self._get_class_margin_bottom(self._para_class)
-        separator = "\n\n" if mb > 0 else "\n"
 
         m = _WEEK_LINE.match(plain)
         if m:
@@ -270,7 +270,7 @@ class _DocParser(HTMLParser):
             self._paragraphs = []
             self._current_banner = None
         elif self._current_week is not None:
-            self._paragraphs.append((para_html, separator))
+            self._paragraphs.append((para_html, "\n"))
 
     def _flush_current_week(self) -> None:
         if self._current_week is None:
