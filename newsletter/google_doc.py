@@ -237,10 +237,10 @@ class _DocParser(HTMLParser):
         self._para_parts = []
         self._in_para = False
 
-        if not para_html:
+        # убираем HTML-теги и спецсимволы (&nbsp; и т.п.) чтобы проверить реальную пустоту
+        if not plain:
             return
 
-        plain = _strip_invisible(re.sub(r"<[^>]+>", "", para_html))
         m = _WEEK_LINE.match(plain)
         if m:
             self._flush_current_week()

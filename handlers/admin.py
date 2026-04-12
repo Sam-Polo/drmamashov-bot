@@ -1227,13 +1227,13 @@ async def callback_adduser_tariff(callback: CallbackQuery, state: FSMContext, bo
                     f"✅ Вам открыт доступ.\n\n"
                     f"Тариф: {tariff_info['name']}\n\n"
                     f"📬 Рассылка по неделям: первое письмо в этот чат — {when_first}, далее по расписанию.\n\n"
-                    f"Закрытый канал — по приглашению от бота (открытым сообщением), если ещё не приходило."
+                    f"Письма рассылки приходят в этот чат по расписанию."
                 )
             else:
                 user_notice = (
                     f"✅ Вам открыт доступ.\n\n"
                     f"Тариф: {tariff_info['name']}\n\n"
-                    f"Следите за сообщениями от бота: уведомления о канале и сервисные сообщения."
+                    f"Следите за сообщениями от бота."
                 )
             await bot.send_message(chat_id=target_user_id, text=user_notice)
         except Exception as e:

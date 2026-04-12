@@ -283,6 +283,8 @@ async def _process_phone_and_pay(message: Message, state: FSMContext, phone: str
 📱 Телефон: {phone}
 💰 Сумма: {tariff_info['price']}₽
 
+⚠️ Перед оплатой отключите VPN.
+
 Нажмите на кнопку ниже, чтобы перейти к оплате."""
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -352,6 +354,8 @@ async def callback_cancel_promocode(callback: CallbackQuery, state: FSMContext):
     text = f"""💳 Оплата подписки "{tariff_info['name']}"
 
 💰 Сумма: {tariff_info['price']}₽
+
+⚠️ Перед оплатой отключите VPN.
 
 Нажмите на кнопку ниже, чтобы перейти к оплате."""
     
@@ -610,6 +614,8 @@ async def process_promocode(message: Message, state: FSMContext):
 Цена: {original_price}₽ → {final_price}₽
 Скидка применяется только на первый месяц
 
+⚠️ Перед оплатой отключите VPN.
+
 Нажмите на кнопку ниже, чтобы перейти к оплате."""
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -700,7 +706,7 @@ async def callback_unsubscribe(callback: CallbackQuery):
     if not prodamus_ok:
         text = (
             "⚠️ По техническим причинам отменить платную подписку в платёжной системе не удалось.\n\n"
-            "Ваша подписка в боте и доступ к каналу сохранены.\n\n"
+            "Ваша подписка сохранена.\n\n"
             "Напишите в техподдержку — помогут завершить отписку."
         )
         await callback.message.edit_text(text, reply_markup=get_back_to_main())
@@ -716,6 +722,6 @@ async def callback_unsubscribe(callback: CallbackQuery):
     except Exception as e:
         logger.error(f"Ошибка при удалении пользователя {user_id} из канала: {e}", exc_info=True)
 
-    text = "❌ Вы отписались от канала. Доступ прекращен."
+    text = "❌ Подписка отменена."
     await callback.message.edit_text(text, reply_markup=get_back_to_main())
     await callback.answer()

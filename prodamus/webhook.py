@@ -247,20 +247,9 @@ class ProdamusWebhookHandler:
             if is_gift:
                 # отправляем сообщение получателю подарка
                 try:
-                    gift_lines = [
-                        "🎁 Вам подарили подписку!",
-                        "",
-                        "✅ Подписка активирована.",
-                        "",
-                        "📬 Материалы рассылки приходят в этот чат по графику.",
-                    ]
-                    if channel_link:
-                        gift_lines += ["", f"🔗 Закрытый канал: {channel_link}"]
-                    else:
-                        gift_lines += ["", "Закрытый канал: если нужна ссылка-приглашение — напишите в поддержку."]
                     await self.bot.send_message(
                         chat_id=recipient_user_id,
-                        text="\n".join(gift_lines),
+                        text="🎁 Вам подарили подписку!\n\n✅ Подписка активирована.\n\n📬 Материалы рассылки приходят в этот чат по графику.",
                     )
                 except Exception as e:
                     logger.warning(f"Не удалось отправить сообщение получателю подарка {recipient_user_id}: {e}")
@@ -275,18 +264,11 @@ class ProdamusWebhookHandler:
                         "Материалы программы уходят в чат с ботом по расписанию рассылки."
                     )
                 else:
-                    payer_lines = [
-                        "✅ Оплата успешно получена!",
-                        "",
-                        "✅ Подписка активирована.",
-                        "",
-                        "📬 Первый выпуск рассылки придёт в этот чат сразу после обработки оплаты (или в течение минуты — по настройке сервера).",
-                    ]
-                    if channel_link:
-                        payer_lines += ["", f"🔗 Закрытый канал: {channel_link}"]
-                    else:
-                        payer_lines += ["", "Закрытый канал: при необходимости ссылку запросите у поддержки."]
-                    payment_text = "\n".join(payer_lines)
+                    payment_text = (
+                        "✅ Оплата успешно получена!\n\n"
+                        "✅ Подписка активирована.\n\n"
+                        "📬 Первый выпуск рассылки придёт в этот чат в течение минуты."
+                    )
                 
                 await self.bot.send_message(
                     chat_id=user_id,
@@ -346,7 +328,7 @@ class ProdamusWebhookHandler:
         try:
             await self.bot.send_message(
                 chat_id=user_id,
-                text="❌ Ваша подписка отменена. Доступ к каналу прекращен."
+                text="❌ Ваша подписка отменена."
             )
         except Exception as e:
             logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}", exc_info=True)
@@ -386,8 +368,7 @@ class ProdamusWebhookHandler:
         try:
             await self.bot.send_message(
                 chat_id=user_id,
-                text="⏰ Срок вашей подписки истек. Доступ к каналу прекращен.\n\n"
-                     "Вы можете продлить подписку в разделе 'Подписка'."
+                text="⏰ Срок вашей подписки истёк.\n\nВы можете продлить подписку в разделе 'Подписка'."
             )
         except Exception as e:
             logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}", exc_info=True)
