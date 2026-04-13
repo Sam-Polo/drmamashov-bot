@@ -81,7 +81,9 @@ class ProdamusWebhookHandler:
                 return False
         
         # обрабатываем разные типы событий
-        if payment_status == "success" or action_code == "auto_payment":
+        if action_code == "auto_payment":
+            await self._handle_auto_payment(user_id, data)
+        elif payment_status == "success":
             await self._handle_payment_success(user_id, data)
         elif payment_status in ["failed", "error"]:
             await self._handle_payment_failed(user_id, data)
@@ -279,6 +281,54 @@ class ProdamusWebhookHandler:
         except Exception as e:
             logger.error(f"Ошибка при отправке ссылки пользователю {user_id}: {e}", exc_info=True)
     
+    async def _handle_auto_payment(self, user_id: int, data: Dict[str, Any]):
+        """обработка рекуррентного списания — продлеваем существующую подписку"""
+        order_num = data.get("order_num", "")
+
+        # определяем тариф из order_num
+        tariff_type = None
+        _ORDER_TARIFF_MAP = [
+            ("quarterly", "quarterly"),
+            ("half_year", "half_year"),
+            ("annual", "annual"),
+            ("lifetime", "lifetime"),
+            ("monthly", "monthly"),
+        ]
+        for fragment, ttype in _ORDER_TARIFF_MAP:
+            if fragment in order_num:
+                tariff_type = ttype
+                break
+
+        if not tariff_type:
+            logger.error(f"auto_payment: не удалось определить тариф из order_num: {order_num}")
+            return
+
+        from config import TARIFFS
+        tariff_info = TARIFFS.get(tariff_type)
+        if not tariff_info:
+            logger.error(f"auto_payment: тариф {tariff_type} не найден в config")
+            return
+
+        duration_days = tariff_info["duration_days"]
+
+        extended = await self.db.extend_subscription(user_id, duration_days)
+        if extended:
+            logger.info(
+                f"auto_payment: подписка user_id={user_id} продлена на {duration_days} дней "
+                f"(тариф {tariff_type}, order_num={order_num})"
+            )
+            try:
+                await self.bot.send_message(
+                    chat_id=user_id,
+                    text=f"✅ Подписка продлена! Следующее списание через {duration_days} дней."
+                )
+            except Exception as e:
+                logger.warning(f"auto_payment: не удалось уведомить user_id={user_id}: {e}")
+        else:
+            # нет активной подписки — создаём новую (fallback)
+            logger.warning(f"auto_payment: нет активной подписки для user_id={user_id}, создаю новую")
+            await self._handle_payment_success(user_id, data)
+
     async def _handle_payment_failed(self, user_id: int, data: Dict[str, Any]):
         """обработка неудачной оплаты"""
         try:

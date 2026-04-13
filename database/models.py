@@ -417,6 +417,34 @@ class Database:
 
         await self.newsletter_reset_anchor_for_new_subscription(user_id)
     
+    async def extend_subscription(self, user_id: int, duration_days: int) -> bool:
+        """продление активной подписки на duration_days дней (для auto_payment).
+        Возвращает True если подписка найдена и продлена."""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute("""
+                SELECT id, end_date FROM subscriptions
+                WHERE user_id = ? AND is_active = 1
+                ORDER BY created_at DESC LIMIT 1
+            """, (user_id,)) as cursor:
+                row = await cursor.fetchone()
+            if not row:
+                return False
+            sub_id = row[0]
+            old_end = row[1]
+            from datetime import timedelta
+            # если end_date в прошлом — продлеваем от сейчас, иначе от end_date
+            if old_end:
+                old_dt = datetime.fromisoformat(str(old_end))
+                base = max(old_dt, datetime.now())
+            else:
+                base = datetime.now()
+            new_end = base + timedelta(days=duration_days)
+            await db.execute("""
+                UPDATE subscriptions SET end_date = ? WHERE id = ?
+            """, (new_end, sub_id))
+            await db.commit()
+        return True
+
     async def create_migration_subscription(
         self,
         user_id: int,
@@ -1111,6 +1139,7 @@ class Database:
         query = f"""
             SELECT DISTINCT user_id FROM subscriptions
             WHERE is_active = 1 AND tariff_type IN ({placeholders})
+              AND (end_date IS NULL OR end_date >= datetime('now'))
         """
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(query, types) as cursor:

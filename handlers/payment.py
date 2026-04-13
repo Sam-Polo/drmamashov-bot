@@ -338,6 +338,9 @@ async def callback_cancel_promocode(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text("⏳ Создаю ссылку на оплату...")
     
+    # TODO: при включении промокодов — сохранять email/phone в state из promo-flow
+    # и передавать их сюда. Сейчас промокоды отключены (PROMOCODES_ENABLED=False).
+    # Без email/phone подпись Prodamus будет отличаться.
     payment_url = await prodamus_api.create_payment_link(
         user_id=user_id,
         tariff_type=tariff_type,
@@ -345,12 +348,12 @@ async def callback_cancel_promocode(callback: CallbackQuery, state: FSMContext):
         tariff_name=tariff_info["name"],
         duration_days=tariff_info["duration_days"]
     )
-    
+
     if not payment_url:
         text = "❌ Ошибка создания ссылки на оплату.\n\nПопробуйте ещё раз или обратитесь в поддержку."
         await callback.message.edit_text(text, reply_markup=get_back_to_main())
         return
-    
+
     text = f"""💳 Оплата подписки "{tariff_info['name']}"
 
 💰 Сумма: {tariff_info['price']}₽
@@ -358,13 +361,13 @@ async def callback_cancel_promocode(callback: CallbackQuery, state: FSMContext):
 ⚠️ Перед оплатой отключите VPN.
 
 Нажмите на кнопку ниже, чтобы перейти к оплате."""
-    
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💳 Перейти к оплате", url=payment_url)],
         # [InlineKeyboardButton(text="🎟️ Применить промокод", callback_data=f"promo_{tariff_type}")],  # временно скрыто
         [InlineKeyboardButton(text="◀️ Назад", callback_data="subscription")],
     ])
-    
+
     await callback.message.edit_text(text, reply_markup=keyboard)
 
 
@@ -494,6 +497,8 @@ async def process_gift_recipient(message: Message, state: FSMContext, bot: Bot):
     
     await message.answer("⏳ Создаю ссылку на оплату подарка...")
     
+    # TODO: при включении подарков — собирать email/phone дарителя и передавать сюда.
+    # Сейчас подарки отключены (GIFTS_ENABLED=False).
     payment_url = await prodamus_api.create_payment_link(
         user_id=giver_user_id,
         tariff_type=tariff_type,
@@ -589,6 +594,8 @@ async def process_promocode(message: Message, state: FSMContext):
     
     await message.answer("⏳ Создаю ссылку на оплату с промокодом...")
     
+    # TODO: при включении промокодов — передавать email/phone из FSM-state.
+    # Сейчас промокоды отключены (PROMOCODES_ENABLED=False).
     payment_url = await prodamus_api.create_payment_link(
         user_id=user_id,
         tariff_type=tariff_type,

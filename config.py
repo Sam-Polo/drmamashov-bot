@@ -68,6 +68,13 @@ TARIFFS = {
         "original_price": _MONTHLY_PRICE * 12,  # 11 880
         "savings": _MONTHLY_PRICE * 12 - 4990,  # 6 890
     },
+    "lifetime": {
+        "price": 9990,
+        "duration_days": None,  # бессрочно (end_date = NULL)
+        "name": "Навсегда",
+        "original_price": None,
+        "savings": None,
+    },
 }
 
 # функции, временно отключенные

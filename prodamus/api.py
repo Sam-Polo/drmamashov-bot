@@ -374,11 +374,6 @@ class ProdamusAPI:
         import logging
         logger = logging.getLogger(__name__)
         
-        # для тестовых запросов пропускаем проверку подписи
-        order_id = data.get("order_id", "")
-        if str(order_id) in ["1", "test"]:
-            return True
-        
         if not self.webhook_secret:
             logger.warning("Webhook secret не установлен - пропускаем проверку подписи")
             return True

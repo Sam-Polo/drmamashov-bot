@@ -50,8 +50,8 @@ async def handle_new_member(event: ChatMemberUpdated):
                 try:
                     await event.bot.send_message(
                         chat_id=user_id,
-                        text="❌ У вас нет активной подписки для доступа к каналу.\n\n"
-                             "Оформите подписку в боте, чтобы получить доступ."
+                        text="❌ У вас нет активной подписки.\n\n"
+                             "Оформите подписку в боте."
                     )
                 except Exception as e:
                     logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
