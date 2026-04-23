@@ -3,7 +3,7 @@ from typing import Dict, Any
 from aiogram import Bot
 from database.models import Database
 from prodamus.api import ProdamusAPI
-from config import DATABASE_PATH, CHANNEL_ID, CHANNEL_INVITE_LINK
+from config import DATABASE_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -205,47 +205,8 @@ class ProdamusWebhookHandler:
         if order_promo:
             logger.info(f"🎟️ Промокод {order_promo.get('promocode')} применен при создании ссылки (скидка: {order_promo.get('discount_amount')}₽ на первый месяц)")
         
-        # разбаниваем получателя подарка (если это подарок) или плательщика
-        logger.info(f"🔓 Начинаем разбан пользователя {recipient_user_id}, CHANNEL_ID={CHANNEL_ID}")
+        # отправляем сообщение получателю подарка (если это подарок) или плательщику
         try:
-            channel_link = (CHANNEL_INVITE_LINK or "").strip() or None
-            if not channel_link:
-                logger.warning("⚠️ CHANNEL_INVITE_LINK не установлен в конфиге")
-            
-            # разбаниваем пользователя, чтобы он мог вернуться по ссылке
-            # убираем из списка banned/removed users
-            if CHANNEL_ID:
-                logger.info(f"🔓 Попытка разбана пользователя {user_id} в канале {CHANNEL_ID}")
-                try:
-                    # для каналов нужно использовать unban_chat_member без параметров
-                    # это уберет пользователя из списка removed users
-                    await self.bot.unban_chat_member(
-                        chat_id=CHANNEL_ID,
-                        user_id=recipient_user_id,
-                        only_if_banned=False
-                    )
-                    logger.info(f"✅ Пользователь {recipient_user_id} разбанен в канале")
-                except Exception as e:
-                    error_msg = str(e).lower()
-                    # админов канала нельзя банить/разбанивать - это нормально
-                    if "administrator" in error_msg:
-                        logger.info(f"ℹ️ Пользователь {recipient_user_id} является админом канала, разбан не требуется")
-                    else:
-                        # для остальных ошибок пробуем альтернативный способ
-                        logger.warning(f"⚠️ Ошибка при разбане пользователя {recipient_user_id}: {e}")
-                        try:
-                            logger.info(f"🔄 Попытка альтернативного разбана для user_id={recipient_user_id}")
-                            await self.bot.unban_chat_member(chat_id=CHANNEL_ID, user_id=recipient_user_id)
-                            logger.info(f"✅ Пользователь {recipient_user_id} разбанен (альтернативный способ)")
-                        except Exception as e2:
-                            if "administrator" in str(e2).lower():
-                                logger.info(f"ℹ️ Пользователь {recipient_user_id} является админом канала")
-                            else:
-                                logger.error(f"❌ Не удалось разбанить пользователя {recipient_user_id}: {e2}")
-            else:
-                logger.warning(f"⚠️ CHANNEL_ID не установлен, разбан пропущен")
-            
-            # отправляем сообщение получателю подарка (если это подарок) или плательщику
             if is_gift:
                 # отправляем сообщение получателю подарка
                 try:
@@ -363,17 +324,6 @@ class ProdamusWebhookHandler:
             # деактивируем по user_id
             await self.db.deactivate_subscription(user_id)
         
-        # удаляем пользователя из канала
-        try:
-            if CHANNEL_ID:
-                await self.bot.ban_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-                logger.info(f"✅ Пользователь {user_id} забанен в канале")
-        except Exception as e:
-            if "user is an administrator of the chat" in str(e):
-                logger.info(f"ℹ️ Пользователь {user_id} является админом канала, бан пропущен")
-            else:
-                logger.error(f"Ошибка при удалении пользователя {user_id} из канала: {e}", exc_info=True)
-        
         # отправляем уведомление
         try:
             await self.bot.send_message(
@@ -406,13 +356,6 @@ class ProdamusWebhookHandler:
         else:
             # деактивируем по user_id
             await self.db.deactivate_subscription(user_id)
-        
-        # удаляем пользователя из канала
-        try:
-            if CHANNEL_ID:
-                await self.bot.ban_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-        except Exception as e:
-            logger.error(f"Ошибка при удалении пользователя {user_id} из канала: {e}", exc_info=True)
         
         # отправляем уведомление
         try:

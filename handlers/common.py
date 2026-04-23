@@ -1,4 +1,4 @@
-from aiogram import Router, F, Bot
+from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, FSInputFile
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
@@ -115,99 +115,6 @@ async def callback_main_menu(callback: CallbackQuery):
         logger.warning(f"Ошибка редактирования сообщения: {e}")
         # если не удалось отредактировать, отправляем новое
         await callback.message.answer(WELCOME_TEXT, reply_markup=get_main_menu(has_sub))
-
-
-@router.message(Command("activate"))
-async def cmd_activate(message: Message, bot: Bot):
-    """команда для активации бесплатного периода для существующих участников канала"""
-    from aiogram.enums import ChatMemberStatus
-    import logging
-    logger = logging.getLogger(__name__)
-    
-    user_id = message.from_user.id
-    user = message.from_user
-    
-    args = message.text.split()[1:] if len(message.text.split()) > 1 else []
-    
-    ACTIVATE_PASSWORD = "cloud"
-    if not args or args[0].lower() != ACTIVATE_PASSWORD:
-        await message.answer(
-            "🔐 Для активации бесплатного периода требуется пароль.\n\n"
-            f"Использование: /activate <пароль>\n\n"
-            "Обратитесь к администратору для получения пароля."
-        )
-        return
-    
-    await db.add_user(user_id, user.username, user.first_name)
-    
-    existing = await db.get_user_subscription(user_id)
-    if existing:
-        is_trial = await db.is_trial_subscription(existing)
-        if is_trial:
-            await message.answer(
-                "✅ У вас уже активирован бесплатный период!\n\n"
-                "Используйте меню бота для управления."
-            )
-        else:
-            await message.answer(
-                "✅ У вас уже есть активная подписка!\n\n"
-                "Используйте меню бота для управления подпиской."
-            )
-        return
-    
-    if not CHANNEL_ID:
-        await message.answer(
-            "❌ Ошибка конфигурации: CHANNEL_ID не установлен.\n"
-            "Обратитесь к администратору."
-        )
-        return
-    
-    try:
-        chat_member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-        status = chat_member.status
-        
-        is_member = status in [
-            ChatMemberStatus.MEMBER,
-            ChatMemberStatus.ADMINISTRATOR,
-            ChatMemberStatus.CREATOR
-        ]
-        
-        if not is_member:
-            await message.answer(
-                "❌ Активация невозможна.\n\n"
-                "Эта команда предназначена только для существующих пользователей, "
-                "которые были добавлены до запуска нового бота.\n\n"
-                "Обратитесь к администратору."
-            )
-            return
-        
-        success = await db.create_free_period(
-            user_id=user_id,
-            duration_days=30
-        )
-        
-        if success:
-            await message.answer(
-                "✅ Бесплатный период успешно активирован!\n\n"
-                "Вы получили доступ на 30 дней для перехода на новый бот.\n\n"
-                "⚠️ По окончании бесплатного периода необходимо оплатить подписку в боте.\n\n"
-                "Теперь вы можете использовать все функции бота. "
-                "Статус подписки — в разделе «Подписка»."
-            )
-            logger.info(f"✅ Активация бесплатного периода для пользователя {user_id} через /activate")
-        else:
-            await message.answer(
-                "⚠️ Не удалось активировать бесплатный период.\n\n"
-                "Возможно, у вас уже есть активная подписка или произошла ошибка.\n"
-                "Обратитесь к администратору."
-            )
-    
-    except Exception as e:
-        logger.error(f"Ошибка при активации бесплатного периода для пользователя {user_id}: {e}", exc_info=True)
-        await message.answer(
-            "❌ Произошла ошибка при активации бесплатного периода.\n\n"
-            "Обратитесь к администратору для ручной активации."
-        )
 
 
 @router.message(F.text == "Старт")

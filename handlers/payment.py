@@ -8,7 +8,7 @@ from database.models import Database
 from prodamus.api import ProdamusAPI
 from keyboards.inline import get_back_to_main, get_main_menu
 from keyboards.reply import get_phone_request_keyboard
-from config import DATABASE_PATH, TARIFFS, CHANNEL_ID, GIFTS_ENABLED, PROMOCODES_ENABLED
+from config import DATABASE_PATH, TARIFFS, GIFTS_ENABLED, PROMOCODES_ENABLED
 from handlers.common import WELCOME_TEXT
 
 logger = logging.getLogger(__name__)
@@ -653,8 +653,6 @@ async def cmd_cancel(message: Message, state: FSMContext):
 @router.callback_query(F.data == "unsubscribe")
 async def callback_unsubscribe(callback: CallbackQuery):
     """обработчик отписки"""
-    from config import CHANNEL_ID
-    
     user_id = callback.from_user.id
     
     subscription = await db.get_user_subscription(user_id)
@@ -721,13 +719,6 @@ async def callback_unsubscribe(callback: CallbackQuery):
         return
 
     await db.deactivate_subscription(user_id)
-
-    try:
-        if CHANNEL_ID:
-            bot = callback.bot
-            await bot.ban_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-    except Exception as e:
-        logger.error(f"Ошибка при удалении пользователя {user_id} из канала: {e}", exc_info=True)
 
     text = "❌ Подписка отменена."
     await callback.message.edit_text(text, reply_markup=get_back_to_main())

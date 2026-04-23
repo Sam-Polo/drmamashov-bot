@@ -15,7 +15,6 @@ from config import (
     ADMIN_IDS,
     TARIFFS,
     BOT_TOKEN,
-    CHANNEL_ID,
     NEWSLETTER_ENABLED,
     NEWSLETTER_GOOGLE_DOC_ID,
     NEWSLETTER_FIRST_SEND_DELAY_MINUTES,
@@ -46,14 +45,6 @@ class UnsubscribeStates(StatesGroup):
     waiting_for_user = State()
     waiting_for_subscription_id = State()
 
-class MigrateUserStates(StatesGroup):
-    """состояния для миграции пользователя"""
-    waiting_for_user = State()
-
-class MigrateCheckStates(StatesGroup):
-    """состояния для проверки статуса пользователя в канале"""
-    waiting_for_user = State()
-
 
 @router.message(Command("help"))
 async def cmd_help(message: Message):
@@ -83,8 +74,6 @@ async def cmd_help(message: Message):
 
 🔧 Прочее:
 /unsubscribe — отписать пользователя (Prodamus + БД + канал)
-/migrate_user — миграция пользователя
-/migrate_check — проверить статус в канале
 /cancel — отмена текущей операции"""
     
     await message.answer(text)
@@ -700,14 +689,6 @@ async def _perform_unsubscribe(message: Message, state: FSMContext, bot: Bot,
             results.append(f"❌ БД: ошибка - {e}")
     elif subscription_data and not prodamus_success:
         results.append("⚠️ БД и канал не тронуты — сначала нужно отписать в Prodamus.")
-    elif not subscription_data and prodamus_success:
-        try:
-            if CHANNEL_ID:
-                await bot.ban_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-                results.append("✅ Канал: пользователь забанен")
-        except Exception as e:
-            logger.warning(f"Ошибка при бане в канале: {e}")
-            results.append(f"⚠️ Канал: {e}")
     elif not subscription_data and not prodamus_success:
         results.append("⚠️ Нет записи в БД, Prodamus не отписан — канал не трогал.")
     
@@ -878,169 +859,6 @@ async def process_broadcast_content(message: Message, state: FSMContext, bot: Bo
         await state.clear()
 
 
-@router.message(Command("migrate_user"))
-async def cmd_migrate_user(message: Message, state: FSMContext):
-    """команда для миграции пользователя (только для админа)"""
-    if message.from_user.id not in ADMIN_IDS:
-        await message.answer("❌ У вас нет доступа к этой команде.")
-        return
-    
-    await state.set_state(MigrateUserStates.waiting_for_user)
-    await message.answer(
-        "🔄 Миграция пользователя\n\n"
-        "Введите Telegram ID пользователя:\n\n"
-        "Для отмены отправьте /cancel"
-    )
-
-
-@router.message(MigrateUserStates.waiting_for_user)
-async def process_migrate_user(message: Message, state: FSMContext, bot: Bot):
-    """обработка ввода user_id для миграции"""
-    if message.from_user.id not in ADMIN_IDS:
-        await state.clear()
-        return
-    
-    text = (message.text or "").strip()
-    if not text:
-        await message.answer(
-            "❌ Введите Telegram ID пользователя.\n\n"
-            "Для отмены отправьте /cancel"
-        )
-        return
-    
-    try:
-        user_id = int(text)
-    except ValueError:
-        await message.answer(
-            "❌ ID должен быть числом.\n\n"
-            "Для отмены отправьте /cancel"
-        )
-        return
-    
-    # проверяем, есть ли уже подписка
-    existing = await db.get_user_subscription(user_id)
-    if existing:
-        await state.clear()
-        await message.answer(
-            f"⚠️ У пользователя {user_id} уже есть активная подписка:\n"
-            f"  Тариф: {existing.get('tariff_type', 'N/A')}\n"
-            f"  Статус: {'✅ Активна' if existing.get('is_active') else '❌ Неактивна'}"
-        )
-        return
-    
-    # проверяем, что пользователь существует в Telegram
-    try:
-        chat_member = await bot.get_chat_member(chat_id=user_id, user_id=user_id)
-        username = chat_member.user.username or "N/A"
-        first_name = chat_member.user.first_name or "N/A"
-    except Exception as e:
-        logger.warning(f"Не удалось получить информацию о пользователе {user_id}: {e}")
-        username = None
-        first_name = None
-    
-    # добавляем пользователя в БД
-    await db.add_user(user_id, username, first_name)
-    
-    # создаем миграционную подписку (месячный тариф)
-    success = await db.create_migration_subscription(
-        user_id=user_id,
-        tariff_type="monthly",
-        duration_days=30
-    )
-    
-    await state.clear()
-    
-    if success:
-        await message.answer(
-            f"✅ Пользователь {user_id} успешно мигрирован!\n"
-            f"  👤 Username: @{username if username else 'N/A'}\n"
-            f"  📦 Подписка: 1 месяц (30 дней)\n"
-            f"  📅 Начало: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-            f"Пользователь может написать /activate в боте для активации."
-        )
-        logger.info(f"✅ Миграция пользователя {user_id} выполнена админом {message.from_user.id}")
-    else:
-        await message.answer(f"❌ Не удалось создать подписку для пользователя {user_id}")
-
-
-@router.message(Command("migrate_check"))
-async def cmd_migrate_check(message: Message, state: FSMContext):
-    """команда для проверки статуса пользователя в канале (только для админа)"""
-    if message.from_user.id not in ADMIN_IDS:
-        await message.answer("❌ У вас нет доступа к этой команде.")
-        return
-    
-    from config import CHANNEL_ID
-    
-    if not CHANNEL_ID:
-        await message.answer("❌ CHANNEL_ID не установлен в конфиге")
-        return
-    
-    await state.set_state(MigrateCheckStates.waiting_for_user)
-    await message.answer(
-        "🔍 Проверка статуса пользователя в канале\n\n"
-        "Введите Telegram ID пользователя:\n\n"
-        "Для отмены отправьте /cancel"
-    )
-
-
-@router.message(MigrateCheckStates.waiting_for_user)
-async def process_migrate_check(message: Message, state: FSMContext, bot: Bot):
-    """обработка ввода user_id для проверки статуса"""
-    if message.from_user.id not in ADMIN_IDS:
-        await state.clear()
-        return
-    
-    from config import CHANNEL_ID
-    
-    text = (message.text or "").strip()
-    if not text:
-        await message.answer(
-            "❌ Введите Telegram ID пользователя.\n\n"
-            "Для отмены отправьте /cancel"
-        )
-        return
-    
-    try:
-        user_id = int(text)
-    except ValueError:
-        await message.answer(
-            "❌ ID должен быть числом.\n\n"
-            "Для отмены отправьте /cancel"
-        )
-        return
-    
-    await state.clear()
-    
-    # проверяем статус пользователя в канале
-    try:
-        from aiogram.enums import ChatMemberStatus
-        chat_member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-        status = chat_member.status
-        
-        status_text = {
-            ChatMemberStatus.MEMBER: "✅ Участник",
-            ChatMemberStatus.ADMINISTRATOR: "✅ Администратор",
-            ChatMemberStatus.CREATOR: "✅ Создатель",
-            ChatMemberStatus.LEFT: "❌ Не участник (покинул)",
-            ChatMemberStatus.KICKED: "❌ Забанен",
-            ChatMemberStatus.RESTRICTED: "⚠️ Ограничен",
-        }.get(status, f"❓ Неизвестный статус: {status}")
-        
-        # проверяем подписку в БД
-        subscription = await db.get_user_subscription(user_id)
-        subscription_text = "✅ Есть активная подписка" if subscription else "❌ Нет активной подписки"
-        
-        await message.answer(
-            f"📊 Информация о пользователе {user_id}:\n\n"
-            f"📢 Статус в канале: {status_text}\n"
-            f"📦 Подписка в БД: {subscription_text}"
-        )
-    except Exception as e:
-        logger.error(f"Ошибка при проверке пользователя {user_id}: {e}", exc_info=True)
-        await message.answer(f"❌ Ошибка при проверке: {e}")
-
-
 @router.message(Command("adduser"))
 async def cmd_adduser(message: Message, state: FSMContext):
     """команда для ручного добавления подписки пользователю (только для админа)"""
@@ -1191,17 +1009,6 @@ async def callback_adduser_tariff(callback: CallbackQuery, state: FSMContext, bo
                 "adduser: очередь рассылки для user_id=%s сброшена (как при новой подписке)",
                 target_user_id,
             )
-        
-        # добавляем пользователя в канал / разбаниваем
-        if CHANNEL_ID:
-            try:
-                await bot.unban_chat_member(
-                    chat_id=CHANNEL_ID,
-                    user_id=target_user_id,
-                    only_if_banned=False
-                )
-            except Exception as e:
-                logger.warning(f"ошибка при добавлении пользователя {target_user_id} в канал: {e}")
         
         await state.clear()
         await callback.answer("✅ Подписка выдана", show_alert=True)

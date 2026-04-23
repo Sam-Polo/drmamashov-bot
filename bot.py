@@ -7,10 +7,10 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.types import BotCommand
 from aiogram.fsm.storage.memory import MemoryStorage
-from config import BOT_TOKEN, DATABASE_PATH, CHANNEL_ID
+from config import BOT_TOKEN, DATABASE_PATH
 from database.models import Database
 from prodamus.webhook import ProdamusWebhookHandler
-from handlers import common, admin, payment, channel
+from handlers import common, admin, payment
 
 # настройка логирования с форматированием
 logging.basicConfig(
@@ -80,15 +80,7 @@ async def check_expired_subscriptions(bot: Bot, db: Database):
                     
                     # деактивируем подписку
                     await db.deactivate_subscription(user_id)
-                    
-                    # удаляем пользователя из канала
-                    try:
-                        if CHANNEL_ID:
-                            await bot.ban_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-                            logger.info(f"✅ Пользователь {user_id} удален из канала (trial истек)")
-                    except Exception as e:
-                        logger.error(f"Ошибка при удалении пользователя {user_id} из канала: {e}", exc_info=True)
-                    
+
                     # отправляем уведомление
                     try:
                         await bot.send_message(
@@ -121,15 +113,7 @@ async def check_expired_subscriptions(bot: Bot, db: Database):
                 
                 # деактивируем подписку
                 await db.deactivate_subscription(user_id)
-                
-                # удаляем пользователя из канала
-                try:
-                    if CHANNEL_ID:
-                        await bot.ban_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-                        logger.info(f"✅ Пользователь {user_id} удален из канала")
-                except Exception as e:
-                    logger.error(f"Ошибка при удалении пользователя {user_id} из канала: {e}", exc_info=True)
-                
+
                 # отправляем уведомление
                 try:
                     await bot.send_message(
@@ -200,7 +184,6 @@ async def main():
     dp = Dispatcher(storage=storage)
     
     # регистрация роутеров
-    dp.include_router(channel.router)  # должен быть первым для обработки событий канала
     dp.include_router(common.router)
     dp.include_router(admin.router)
     dp.include_router(payment.router)
