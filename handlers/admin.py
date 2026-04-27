@@ -827,13 +827,13 @@ async def cmd_cancel_admin(message: Message, state: FSMContext):
         BroadcastStates.waiting_for_content,
         UnsubscribeStates.waiting_for_user,
         UnsubscribeStates.waiting_for_subscription_id,
-        MigrateUserStates.waiting_for_user,
-        MigrateCheckStates.waiting_for_user,
         AddUserStates.waiting_for_user,
         AddUserStates.waiting_for_tariff,
         PromocodeAdminStates.waiting_for_code,
         PromocodeAdminStates.waiting_for_discount,
         PromocodeAdminStates.waiting_for_delete_confirmation,
+        NewsletterAudioStates.waiting_for_week,
+        NewsletterAudioStates.waiting_for_audio,
     ]
     
     # проверяем, что текущее состояние - админское

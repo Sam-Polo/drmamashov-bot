@@ -454,49 +454,6 @@ class Database:
             await db.commit()
         return True
 
-    async def create_migration_subscription(
-        self,
-        user_id: int,
-        tariff_type: str = "monthly",
-        duration_days: Optional[int] = 30
-    ):
-        """создание подписки для миграции (без prodamus данных)"""
-        # проверяем, есть ли уже активная подписка
-        existing = await self.get_user_subscription(user_id)
-        if existing:
-            return False  # подписка уже существует
-        
-        # создаем подписку
-        await self.create_subscription(
-            user_id=user_id,
-            tariff_type=tariff_type,
-            duration_days=duration_days,
-            prodamus_subscription_id=None,
-            prodamus_order_id=None
-        )
-        return True
-    
-    async def create_free_period(
-        self,
-        user_id: int,
-        duration_days: Optional[int] = 30
-    ):
-        """создание бесплатного периода (trial) для миграции"""
-        # проверяем, есть ли уже активная подписка или бесплатный период
-        existing = await self.get_user_subscription(user_id)
-        if existing:
-            return False  # уже есть активная подписка/период
-        
-        # создаем бесплатный период с типом "trial"
-        await self.create_subscription(
-            user_id=user_id,
-            tariff_type="trial",
-            duration_days=duration_days,
-            prodamus_subscription_id=None,
-            prodamus_order_id=None
-        )
-        return True
-    
     async def is_trial_subscription(self, subscription: dict) -> bool:
         """проверка, является ли подписка бесплатным периодом (trial)"""
         return subscription.get("tariff_type") == "trial"

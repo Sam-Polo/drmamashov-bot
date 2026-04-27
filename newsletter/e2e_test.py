@@ -98,7 +98,7 @@ async def run_newsletter_e2e_test(
                     logger.warning("newsletter e2e: аудио неделя %s: %s", wk, audio_err)
         except TelegramForbiddenError:
             logger.warning("newsletter e2e: user %s заблокировал бота", target_user_id)
-            return False, f"user_id={target_user_id} заблокировал бота на неделе {wk}.{warn}"
+            return False, f"user_id={target_user_id} заблокировал бота на неделе {wk}"
         except Exception as e:
             logger.error("newsletter e2e: send %s", e, exc_info=True)
             return False, f"ошибка отправки (неделя {wk}): {e}"

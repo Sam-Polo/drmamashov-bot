@@ -24,9 +24,6 @@ ADMIN_IDS = [int(admin_id.strip()) for admin_id in os.getenv("ADMIN_IDS", "0").s
 # можно указать числовой ID (например -1001234567890) или username (@channel_name)
 CHANNEL_ID = os.getenv("CHANNEL_ID", "")
 
-# ссылка-приглашение на канал (для отправки пользователям)
-CHANNEL_INVITE_LINK = os.getenv("CHANNEL_INVITE_LINK", "")
-
 # путь к БД
 # в Docker используем /app/data/bot.db, локально - bot.db
 DATABASE_PATH = os.getenv("DATABASE_PATH", "bot.db")
