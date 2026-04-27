@@ -4,7 +4,8 @@
       "Bash(xargs grep:*)",
       "Bash(python -m py_compile handlers/admin.py)",
       "Bash(python -m py_compile database/models.py)",
-      "Bash(python -m py_compile newsletter/weekly_job.py)"
+      "Bash(python -m py_compile newsletter/weekly_job.py)",
+      "Bash(python -m py_compile newsletter/e2e_test.py)"
     ]
   }
 }

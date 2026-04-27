@@ -86,6 +86,16 @@ async def run_newsletter_e2e_test(
                     text=part,
                     parse_mode=ParseMode.HTML,
                 )
+
+            audio = await db.newsletter_audio_get(wk)
+            if audio:
+                try:
+                    if audio["file_type"] == "voice":
+                        await bot.send_voice(chat_id=target_user_id, voice=audio["file_id"])
+                    else:
+                        await bot.send_audio(chat_id=target_user_id, audio=audio["file_id"])
+                except Exception as audio_err:
+                    logger.warning("newsletter e2e: аудио неделя %s: %s", wk, audio_err)
         except TelegramForbiddenError:
             logger.warning("newsletter e2e: user %s заблокировал бота", target_user_id)
             return False, f"user_id={target_user_id} заблокировал бота на неделе {wk}.{warn}"
