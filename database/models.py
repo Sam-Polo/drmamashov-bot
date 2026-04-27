@@ -57,6 +57,15 @@ class Database:
             except:
                 pass  # поле уже существует
 
+            # аудио-вложения к письмам рассылки (по номеру недели)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS newsletter_audio (
+                    week_num INTEGER PRIMARY KEY,
+                    file_id TEXT NOT NULL,
+                    file_type TEXT NOT NULL DEFAULT 'voice'
+                )
+            """)
+
             # прогресс рассылки по неделям (якорь = момент старта подписки + задержка, МСК в ISO)
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS newsletter_progress (
@@ -1145,3 +1154,43 @@ class Database:
             async with db.execute(query, types) as cursor:
                 rows = await cursor.fetchall()
                 return [row[0] for row in rows]
+
+    async def newsletter_audio_set(self, week_num: int, file_id: str, file_type: str) -> None:
+        """сохранить (или заменить) аудио для письма недели week_num"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "INSERT OR REPLACE INTO newsletter_audio (week_num, file_id, file_type) VALUES (?, ?, ?)",
+                (week_num, file_id, file_type),
+            )
+            await db.commit()
+
+    async def newsletter_audio_get(self, week_num: int) -> Optional[dict]:
+        """вернуть {'file_id': ..., 'file_type': ...} или None"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT file_id, file_type FROM newsletter_audio WHERE week_num = ?",
+                (week_num,),
+            ) as cursor:
+                row = await cursor.fetchone()
+                return dict(row) if row else None
+
+    async def newsletter_audio_delete(self, week_num: int) -> bool:
+        """удалить аудио для недели; возвращает True если запись существовала"""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "DELETE FROM newsletter_audio WHERE week_num = ?", (week_num,)
+            ) as cursor:
+                deleted = cursor.rowcount > 0
+            await db.commit()
+        return deleted
+
+    async def newsletter_audio_list(self) -> list[dict]:
+        """список всех недель с аудио"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT week_num, file_type FROM newsletter_audio ORDER BY week_num"
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(r) for r in rows]

@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(python -m py_compile handlers/admin.py)",
+      "Bash(python -m py_compile database/models.py)",
+      "Bash(python -m py_compile newsletter/weekly_job.py)"
     ]
   }
 }

@@ -45,6 +45,11 @@ class UnsubscribeStates(StatesGroup):
     waiting_for_user = State()
     waiting_for_subscription_id = State()
 
+class NewsletterAudioStates(StatesGroup):
+    """состояния для привязки аудио к письму"""
+    waiting_for_week = State()
+    waiting_for_audio = State()
+
 
 @router.message(Command("help"))
 async def cmd_help(message: Message):
@@ -71,6 +76,7 @@ async def cmd_help(message: Message):
 /broadcast — рассылка сообщения всем пользователям
 /newsletter_status — проверить парсинг Google Doc (недели)
 /newsletter_test [user_id] — тест: все недели подряд с паузами (как прод), без сдвига очереди в БД
+/newsletter_audio — управление аудио-вложениями к письмам
 
 🔧 Прочее:
 /unsubscribe — отписать пользователя (Prodamus + БД + канал)
@@ -187,6 +193,93 @@ async def cmd_newsletter_test(message: Message, bot: Bot):
 
     ok, report = await run_newsletter_e2e_test(bot, db, NEWSLETTER_GOOGLE_DOC_ID, target_user_id)
     await message.answer(("✅ " if ok else "❌ ") + report)
+
+
+@router.message(Command("newsletter_audio"))
+async def cmd_newsletter_audio(message: Message, state: FSMContext):
+    """управление аудио-вложениями к письмам рассылки"""
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("❌ У вас нет доступа к этой команде.")
+        return
+
+    # подкоманда: /newsletter_audio list
+    args = (message.text or "").split()[1:]
+    if args and args[0].lower() == "list":
+        items = await db.newsletter_audio_list()
+        if not items:
+            await message.answer("🔇 Аудио к письмам не привязано.")
+        else:
+            lines = "\n".join(f"Неделя {r['week_num']} — {r['file_type']}" for r in items)
+            await message.answer(f"🎙 Аудио по неделям:\n{lines}")
+        return
+
+    # подкоманда: /newsletter_audio delete <week>
+    if args and args[0].lower() == "delete" and len(args) >= 2 and args[1].isdigit():
+        week_num = int(args[1])
+        deleted = await db.newsletter_audio_delete(week_num)
+        await message.answer(
+            f"✅ Аудио для недели {week_num} удалено." if deleted
+            else f"⚠️ Аудио для недели {week_num} не найдено."
+        )
+        return
+
+    # без подкоманды — запускаем FSM для добавления
+    await state.set_state(NewsletterAudioStates.waiting_for_week)
+    await message.answer(
+        "🎙 Привязка аудио к письму\n\n"
+        "Введите номер недели (например: 3)\n\n"
+        "Другие команды:\n"
+        "• /newsletter_audio list — список недель с аудио\n"
+        "• /newsletter_audio delete 3 — удалить аудио недели 3\n\n"
+        "Для отмены — /cancel"
+    )
+
+
+@router.message(NewsletterAudioStates.waiting_for_week)
+async def process_newsletter_audio_week(message: Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS:
+        await state.clear()
+        return
+
+    text = (message.text or "").strip()
+    if not text.isdigit() or int(text) < 1:
+        await message.answer("❌ Введите положительное число — номер недели.\n\nДля отмены — /cancel")
+        return
+
+    week_num = int(text)
+    await state.update_data(week_num=week_num)
+    await state.set_state(NewsletterAudioStates.waiting_for_audio)
+    await message.answer(
+        f"📩 Неделя {week_num} выбрана.\n\n"
+        "Теперь пришлите голосовое сообщение или аудио-файл, который нужно прикрепить к этому письму."
+    )
+
+
+@router.message(NewsletterAudioStates.waiting_for_audio)
+async def process_newsletter_audio_file(message: Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS:
+        await state.clear()
+        return
+
+    data = await state.get_data()
+    week_num = data["week_num"]
+
+    if message.voice:
+        file_id = message.voice.file_id
+        file_type = "voice"
+    elif message.audio:
+        file_id = message.audio.file_id
+        file_type = "audio"
+    else:
+        await message.answer("❌ Пришлите голосовое сообщение или аудио-файл.\n\nДля отмены — /cancel")
+        return
+
+    await db.newsletter_audio_set(week_num, file_id, file_type)
+    await state.clear()
+    await message.answer(
+        f"✅ Аудио ({file_type}) сохранено для письма недели {week_num}.\n"
+        "При следующей рассылке этой недели оно будет отправлено после текста."
+    )
 
 
 @router.message(Command("users"))

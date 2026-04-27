@@ -228,6 +228,19 @@ async def run_newsletter_tick(bot: Bot, db: Database, doc_id: str) -> None:
                             parse_mode=ParseMode.HTML,
                         )
 
+                    audio = await db.newsletter_audio_get(next_w)
+                    if audio:
+                        try:
+                            if audio["file_type"] == "voice":
+                                await bot.send_voice(chat_id=user_id, voice=audio["file_id"])
+                            else:
+                                await bot.send_audio(chat_id=user_id, audio=audio["file_id"])
+                        except Exception as audio_err:
+                            logger.warning(
+                                "newsletter: не удалось отправить аудио user_id=%s неделя=%s: %s",
+                                user_id, next_w, audio_err,
+                            )
+
                     await db.newsletter_advance_week(user_id, next_w + 1)
                     sent_ok += 1
 
