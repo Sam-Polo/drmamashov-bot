@@ -31,6 +31,8 @@ services:
       - NEWSLETTER_INCLUDE_TRIAL=${NEWSLETTER_INCLUDE_TRIAL:-0}
       - NEWSLETTER_TEST_FIRST_DELAY_SEC=${NEWSLETTER_TEST_FIRST_DELAY_SEC:-2}
       - NEWSLETTER_TEST_BETWEEN_WEEKS_SEC=${NEWSLETTER_TEST_BETWEEN_WEEKS_SEC:-5}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - SOCKS5_PROXY=${SOCKS5_PROXY:-}
     volumes:
       - ./data:/app/data  # монтируем директорию для БД
       - ./media:/app/media  # монтируем директорию для медиа

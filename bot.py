@@ -1,9 +1,11 @@
 import asyncio
 import logging
+import os
 from datetime import datetime
 import aiohttp
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.types import BotCommand
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -178,8 +180,16 @@ async def newsletter_scheduler_loop(bot: Bot, db: Database):
 
 async def main():
     """главная функция запуска бота"""
-    # инициализация бота
-    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    # инициализация бота (с прокси если задан HTTPS_PROXY или SOCKS5_PROXY)
+    proxy_url = os.getenv("HTTPS_PROXY") or os.getenv("SOCKS5_PROXY")
+    session = AiohttpSession(proxy=proxy_url) if proxy_url else None
+    if proxy_url:
+        logger.info("🔀 Используется прокси: %s", proxy_url.split("@")[-1])  # скрываем логин/пароль
+    bot = Bot(
+        token=BOT_TOKEN,
+        session=session,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
     
