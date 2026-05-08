@@ -225,12 +225,15 @@ async def main():
     asyncio.create_task(newsletter_scheduler_loop(bot, db))
     logger.info("✅ Запущен планировщик newsletter (якорь от подписки → Google Doc)")
     
-    # устанавливаем команды меню бота
-    await bot.set_my_commands([
-        BotCommand(command="start", description="Главное меню")
-    ])
-    logger.info("✅ Команды меню установлены")
-    
+    # устанавливаем команды меню бота (не критично если упадёт)
+    try:
+        await bot.set_my_commands([
+            BotCommand(command="start", description="Главное меню")
+        ])
+        logger.info("✅ Команды меню установлены")
+    except Exception as e:
+        logger.warning("⚠️ Не удалось установить команды меню: %s", e)
+
     # запуск бота
     logger.info("✅ Бот запущен и готов к работе")
     logger.info("=" * 80)

@@ -4,8 +4,10 @@ Webhook сервер для приема уведомлений от Prodamus
 """
 import asyncio
 import logging
+import os
 from aiohttp import web
 from aiogram import Bot
+from aiogram.client.session.aiohttp import AiohttpSession
 from prodamus.webhook import ProdamusWebhookHandler
 from config import BOT_TOKEN, PRODAMUS_WEBHOOK_SECRET
 
@@ -17,8 +19,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# инициализация бота и обработчика
-bot = Bot(token=BOT_TOKEN)
+# инициализация бота и обработчика (с прокси для исходящих запросов к Telegram API)
+_proxy_url = os.getenv("HTTPS_PROXY") or os.getenv("SOCKS5_PROXY")
+_session = AiohttpSession(proxy=_proxy_url) if _proxy_url else None
+if _proxy_url:
+    logger.info("🔀 webhook: используется прокси: %s", _proxy_url.split("@")[-1])
+bot = Bot(token=BOT_TOKEN, session=_session)
 webhook_handler = ProdamusWebhookHandler(bot)
 
 

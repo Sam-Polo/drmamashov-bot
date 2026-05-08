@@ -10,7 +10,8 @@
       "Bash(python -m py_compile config.py)",
       "Bash(python -m py_compile handlers/common.py)",
       "Bash(python -m py_compile handlers/payment.py)",
-      "Bash(python -m py_compile prodamus/webhook.py)"
+      "Bash(python -m py_compile prodamus/webhook.py)",
+      "Bash(python -m py_compile webhook_server.py)"
     ]
   }
 }
