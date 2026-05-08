@@ -1,5 +1,6 @@
 .env
 .env.*
+.claude/
 *.db
 *.sqlite
 *.sqlite3
